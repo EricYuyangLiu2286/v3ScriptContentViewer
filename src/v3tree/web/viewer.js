@@ -275,9 +275,16 @@ function select(k){
   const lname = id => { const l=(D.meta.layers||[]).find(x=>x.id===id); return l ? l.name : id; };
   const sites=n.sites.map(s=>`<div><code>${esc(s.file)}:${s.line}</code> <span class="muted">${esc(lname(s.root))} · ${esc(s.how)}${s.replaced?' · replaced':''}${s.ignored?' · ignored (duplicate)':''}</span></div>`).join('') || `<span class="muted">${esc(t('ui.undefined_site'))}</span>`;
   const state = n.v==='unjudged' ? (n.stopped?t('ui.stopped_badge'):t('ui.pending_badge')) : vname(n.v);
+  // where the definition in effect comes from: the game or a mod (several when INJECT adds to it)
+  const layerName = id => { const l=(D.meta.layers||[]).find(x=>x.id===id); return !l ? id : (l.kind==='game' ? t('ui.src_game') : l.name); };
+  const uniq = a => [...new Set(a)];
+  const live = uniq(n.sites.filter(s=>!s.replaced && !s.ignored).map(s=>layerName(s.root)));
+  const over = uniq(n.sites.filter(s=>s.replaced || s.ignored).map(s=>layerName(s.root))).filter(x=>!live.includes(x));
+  const srcText = f => live.length ? live.map(f).join(' + ') + (over.length ? ' · '+t('ui.src_over',{x:over.map(f).join(' + ')}) : '') : t('ui.src_none');
+  const srcFull = srcText(x=>x), srcShort = srcText(x=>cut(x,20));   // long mod names are shortened, the override note stays
   panel.innerHTML = `<button class="close" id="xClose">×</button><h2>${esc(n.name)}${n.noloc?' <span class="pill">'+esc(t('ui.noloc_pill'))+'</span>':''}</h2>
   <div class="sub">${esc(n.id)}</div>
-  <div style="margin-top:6px"><span class="pill">${esc(n.tz)}</span><span class="pill">${esc(state)}${n.sys?' · '+esc(n.sys):''}</span>${n.dis?'<span class="pill">'+esc(t('ui.disabled_badge'))+': '+esc(n.dis)+'</span>':''}</div>
+  <div style="margin-top:6px"><span class="pill">${esc(n.tz)}</span><span class="pill" title="${esc(t('ui.src_label')+srcFull)}">${esc(t('ui.src_label')+srcShort)}</span><span class="pill">${esc(t('ui.verdict_label')+state)}${n.sys?' · '+esc(n.sys):''}</span>${n.dis?'<span class="pill">'+esc(t('ui.disabled_badge'))+': '+esc(n.dis)+'</span>':''}</div>
   <div class="acts"><button id="xFocus" title="${esc(t('ui.focus_hint'))}">${esc(t(st.focus?'ui.focus_exit':'ui.focus_start'))}</button></div>
   ${actButtons([k], n.v)}
   <div class="muted" style="margin-top:6px">${esc(t('ui.judgment'))}${esc(n.why)} <span class="pill">${esc(n.src)}</span>${n.from?'<br>'+t('ui.found_by',{x:'<a data-go="'+esc(n.from)+'">'+esc((byKey.get(n.from)||{}).name||n.from)+'</a>'}):''}</div>
