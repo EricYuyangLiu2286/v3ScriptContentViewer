@@ -6,6 +6,8 @@ Give v3tree a journal entry, event or decision (or a country tag). It finds the 
 
 It is for modders who have lost track of a large system: chains rewritten many times, or code written by others or by an AI.
 
+![A map in the browser: the selected node's incoming links, each with file:line, on the right](docs/images/map.webp)
+
 - **Mechanical, traceable index.** Parses the game and any number of mods in load order. Calls, condition reads, buttons, progress bars, variables, modifiers, laws, pops… each edge carries file:line. What it cannot resolve is listed, never guessed.
 - **You decide the boundary.** A map needs to know what belongs to your theme. Do it by hand in a local web page (search N steps, accept / draw-only / remove, search further, sign off), or let an AI agent judge every neighbour with a written reason.
 - **Checks itself.** Every report re-checks 10 random edges against the source, searches the raw text for references the index missed, and lists suspected problems (variables written but never read, events nothing fires, effects only shown in tooltips…).
@@ -13,7 +15,7 @@ It is for modders who have lost track of a large system: chains rewritten many t
 
 ## Before you start
 
-- **Languages.** The interface and reports are in English and Chinese. The map shows `english` and `simp_chinese` localisation; other languages are untested. If you work in another language, ask your AI agent to add it.
+- **Languages.** The interface and reports are in English and Chinese. The map shows `english` and `simp_chinese` localisation; other languages are untested. If you work in another language, ask your AI agent to add it. The interface language and the localisation languages are two separate settings, and names and type labels are stored when the index is built: after changing either, **rebuild the index**.
 - **What it maps.** Script content only: journal entries, events, decisions, triggers, effects, variables, modifiers, laws, pop moves, flag definitions and the like. It does not read GUI files, the map, buildings or production methods, and it does not run the game. Don't expect it to pick up everything; see [Limitations](docs/en/limitations.md).
 - **Performance.** Maps with many links (roughly 1,000+ nodes, or nodes with heavy fan-out) lag in the browser. Be patient, as we all are with Victoria 3 itself, or fold levels and filter types to lighten the map.
 
@@ -28,6 +30,8 @@ Run commands from the repository folder as `python run.py <command>`. Optional: 
 1. Double-click `start.bat` (Windows) or run `./start.sh` (macOS/Linux). Your browser opens.
 2. **Settings:** the game install folder and/or your mod folder(s); at least one is required. "Import from launcher" reads your active playset in load order. Save, then **Build index** (10–30 seconds).
 3. **New search:** type an id (autocomplete helps) or a country tag, choose the number of steps (1–10), keep or change the stop rules, **Start search**.
+
+   ![New search: autocomplete for the root, stop rules below](docs/images/new-search.png)
 4. Click nodes to see their code, file:line and every connection. **Accept**, **Draw, don't expand** or **Remove**; Ctrl-click to select several. **Search further** grows the tree from accepted and undecided nodes. **Undo** steps back.
 5. **Sign off:** the map, a report and a JSON file are saved in `output/cases/<name>/`. `map.html` opens by double-click, offline.
 
