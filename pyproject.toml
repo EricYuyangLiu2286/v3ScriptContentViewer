@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v3tree"
+version = "0.1.0"
+description = "Map how Victoria 3 script content (journal entries, events, decisions, variables...) connects; every edge traced to file:line."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "EricYuyangLiu2286" }]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+v3tree = "v3tree.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+v3tree = ["web/*"]

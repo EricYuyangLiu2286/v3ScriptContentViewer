@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="__LANG__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<div id="top">
+  <h1 id="ttl"></h1>
+  <div class="theme" id="thm"></div>
+  <input type="search" id="q">
+  <label><input type="checkbox" id="optLabels" checked> <span id="tLabels"></span></label>
+  <label id="lblAllLabels"><input type="checkbox" id="optAllLabels"> <span id="tAllLabels"></span></label>
+  <label><input type="checkbox" id="optSoft" checked> <span id="tSoft"></span></label>
+  <label><input type="checkbox" id="optBoundary" checked> <span id="tBoundary"></span></label>
+  <label><input type="checkbox" id="optDisabled"> <span id="tDisabled"></span></label>
+  <button id="btnFit"></button>
+  <button id="btnExpand"></button>
+  <button id="btnFold"></button>
+  <button id="btnTheme"></button>
+  <span class="muted" id="cnt"></span>
+</div>
+<div id="results"></div>
+<div id="stage"><svg id="svg"><defs>
+  <marker id="arCall" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--call)"/></marker>
+  <marker id="arCond" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--cond)"/></marker>
+  <marker id="arStruct" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--struct)"/></marker>
+  <marker id="arSoft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--soft)"/></marker>
+</defs><g id="vp"><g id="gE"></g><g id="gN"></g></g></svg></div>
+<div id="legend"></div>
+<div id="side"></div>
+<script id="data" type="application/json">/*__DATA__*/null</script>
+<script id="strings" type="application/json">/*__L__*/null</script>
+<script>
+/*__JS__*/
+</script>
+<script>
+CTViewer.init({L: JSON.parse(document.getElementById('strings').textContent)});
+CTViewer.load(JSON.parse(document.getElementById('data').textContent));
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+ "title": "acw_example",
+ "theme": "American Civil War: the slavery countdown and the war it leads to",
+ "roots": ["je:je_acw_countdown"],
+ "decisions_file": "decisions.txt",
+ "mode": "llm"
+}

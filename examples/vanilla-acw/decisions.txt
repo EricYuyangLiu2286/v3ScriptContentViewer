@@ -1,0 +1,31 @@
+// Example: first round of judgments for the vanilla root je_acw_countdown (vanilla only, no mod).
+// Copy this folder to <output_dir>/cases/acw_example/, then run: v3tree expand acw_example
+// It lists the next round of undecided neighbours; keep judging until pending=0, then: v3tree render acw_example
+// Format: in|boundary|out KEY [@System] # reason ; rule ID VERDICT [@System] conditions # reason ; soft yes|no WRITER|READER|OBJECT # reason
+
+rule T1 boundary @Country type=tag # countries are drawn but not expanded
+rule P1 boundary @Character type=chartemplate # character templates are drawn but not expanded
+rule OA1 boundary @Engine_on_action type=onaction id_regex=^on_ # engine on_actions are shared by many systems
+rule ID1 boundary @Ideologies type=ideology # ideologies only state an attitude towards the countdown
+
+in event:acw_events.1 # flavour event fired by the countdown's monthly pulse
+in event:acw_events.2 # flavour event, yearly pulse
+in event:acw_events.3 # flavour event, monthly pulse
+in event:acw_events.5 # flavour event, yearly pulse
+in event:acw_events.6 # flavour event, yearly pulse
+in event:acw_je_events.1 # The Southern Declaration: the failure outcome starts the war
+in event:slavery_law_events.7 # the success outcome: reconciliation
+in var:acw_progress_var # countdown progress, set at start
+in var:csa_will_spawn_var # set when the war is about to start
+in var:je_acw_countdown_complete # set by the success outcome
+in modifier:missouri_compromise # applied by the success outcome
+in movesupport:movement_support_je_acw_countdown # movement pop support while the countdown runs
+in svalue:movement_radicalism_acw_countdown # movement radicalism during the countdown
+boundary law:law_slavery_banned @Slavery_laws # read by the outcomes; a law many systems use
+boundary movement:movement_anti_slavery @Political_movements # reads the countdown in its support weight
+boundary movement:movement_pro_slavery @Political_movements # same
+boundary party:conservative_party @Parties # party conditions read the countdown
+boundary party:liberal_party @Parties # same
+boundary pbname:golden_circle @Power_bloc_names # a power bloc name that depends on the countdown
+boundary history:countries/usa_-_usa @Start_history # the USA start history; drawn, not expanded
+soft no *|*|law:* # laws are shared by many systems; not a theme link

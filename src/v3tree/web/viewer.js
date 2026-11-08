@@ -1,0 +1,279 @@
+/* Content-tree viewer: a two-sided tidy tree in SVG. No external libraries.
+   CTViewer.init({L, editable, onJudge}) once, then CTViewer.load(data, keepView) for each graph. */
+window.CTViewer = (function(){
+'use strict';
+let L = {};
+const t = (k, o) => { let s = (k in L) ? L[k] : k; if(o) for(const x in o) s = s.split('{'+x+'}').join(o[x]); return s; };
+const NW = 214, NH = 44, GX = 150, GY = 22, COLW = NW + GX, ROWH = NH + GY;
+const COLORS = {je:'#d64545',button:'#ef8a2b',bar:'#c9a227',event:'#3b7dd8',decision:'#9b59b6',law:'#1aa38c',dp:'#b0446e',
+  wargoal:'#b0446e',modifier:'#5f9a32',var:'#8a8f98',gvar:'#6f747d',onaction:'#21a9b6',seffect:'#5b6ee1',strigger:'#8e7cc3',
+  svalue:'#8e7cc3',tag:'#a0522d',chartemplate:'#c4627a',customloc:'#7a8a99',history:'#555b66',culture:'#8d6e63',pop:'#8d6e63',
+  movement:'#777',diplaction:'#777'};
+const GROUPS = ['je','button','bar','event','decision','law','dp','modifier','var','onaction','seffect','strigger','tag','chartemplate','other'];
+const TPRI = {je:0,event:1,button:2,bar:3,decision:4,dp:5,wargoal:5,onaction:6,seffect:7,strigger:8,svalue:9,modifier:10,law:11,var:12,gvar:12,tag:13,chartemplate:14};
+const KPRI = {struct:0,call:1,cond:2,soft:3};
+function grp(ty){ if(ty==='wargoal') return 'dp'; if(ty==='gvar') return 'var'; if(ty==='svalue') return 'strigger';
+  return GROUPS.includes(ty) ? ty : 'other'; }
+function groupLabel(g){ return L['ui.g.'+g] || L['type.'+g] || g; }
+const NS = 'http://www.w3.org/2000/svg';
+const $ = id => document.getElementById(id);
+function el(tag,a,p){ const e=document.createElementNS(NS,tag); for(const k in a) e.setAttribute(k,a[k]); if(p) p.appendChild(e); return e; }
+function cut(s,lim){ let w=0,o=''; for(const ch of String(s)){ w += /[⺀-￿]/.test(ch)?1:0.56; if(w>lim) return o+'…'; o+=ch; } return o; }
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function isDark(){ const a=document.documentElement.getAttribute('data-theme');
+  return a==='dark' || (a!=='light' && matchMedia('(prefers-color-scheme: dark)').matches); }
+function tint(hex,a){ const n=parseInt(hex.slice(1),16); const r=n>>16,g=(n>>8)&255,b=n&255; const base=isDark()?[33,34,39]:[255,255,255];
+  return `rgb(${Math.round(base[0]+(r-base[0])*a)},${Math.round(base[1]+(g-base[1])*a)},${Math.round(base[2]+(b-base[2])*a)})`; }
+
+let opts = {}, D = null, byKey, roots, outE, inE, parent, children, side, depth;
+let POS = new Map(), curEdges = [], curVis = new Set(), box = {x0:0,y0:0,w:0,h:0};
+const st = { types:new Set(GROUPS), labels:true, soft:true, boundary:true, disabled:false,
+  collapsed:new Set(), sel:null, multi:new Set(), k:1, tx:40, ty:40 };
+let svg, vp, gE, gN;
+
+// ---------------- data
+function expandable(n){ return n.v==='in' || (n.v==='unjudged' && !n.stopped); }
+function buildTree(){
+  byKey = new Map(D.nodes.map(n=>[n.k,n]));
+  roots = D.meta.roots.filter(r=>byKey.has(r));
+  outE = new Map(); inE = new Map();
+  D.nodes.forEach(n=>{outE.set(n.k,[]);inE.set(n.k,[]);});
+  D.edges.forEach((e,i)=>{ e.i=i; if(outE.has(e.s)) outE.get(e.s).push(e); if(inE.has(e.t)) inE.get(e.t).push(e); });
+  parent = new Map(); children = new Map(); side = new Map(); depth = new Map();
+  const q=[...roots]; const seen=new Set(roots); roots.forEach(r=>{side.set(r,0);depth.set(r,0);});
+  while(q.length){ const c=q.shift();
+    const cand=[...outE.get(c).map(e=>({o:e.t,d:'out',e})), ...inE.get(c).map(e=>({o:e.s,d:'in',e}))]
+      .sort((a,b)=>(a.d===b.d?0:(a.d==='out'?-1:1)) || (KPRI[a.e.soft?'soft':a.e.k]-KPRI[b.e.soft?'soft':b.e.k]) ||
+        ((TPRI[byKey.get(a.o).t]??20)-(TPRI[byKey.get(b.o).t]??20)) || String(byKey.get(a.o).name).localeCompare(String(byKey.get(b.o).name)));
+    for(const {o,d} of cand){ if(seen.has(o)) continue; seen.add(o); parent.set(o,c);
+      if(!children.has(c)) children.set(c,[]); children.get(c).push(o);
+      side.set(o, side.get(c)===0 ? (d==='in'?-1:1) : side.get(c)); depth.set(o, depth.get(c)+1);
+      if(expandable(byKey.get(o))) q.push(o); } }
+  D.nodes.forEach(n=>{ if(!seen.has(n.k) && roots.length){ parent.set(n.k,roots[0]); side.set(n.k,1); depth.set(n.k,1);
+    if(!children.has(roots[0])) children.set(roots[0],[]); children.get(roots[0]).push(n.k); } });
+}
+function hiddenByCollapse(){ const h=new Set(); for(const c of st.collapsed){ const stack=[...(children.get(c)||[])];
+  while(stack.length){ const x=stack.pop(); if(h.has(x)) continue; h.add(x); (children.get(x)||[]).forEach(y=>stack.push(y)); } } return h; }
+function visibleNodes(){ const hc=hiddenByCollapse(); const vis=new Set();
+  for(const n of D.nodes){ if(hc.has(n.k)) continue; if(!st.types.has(grp(n.t))) continue;
+    if(n.dis && !st.disabled) continue; if(n.v==='boundary' && !st.boundary) continue; vis.add(n.k); }
+  roots.forEach(r=>vis.add(r)); return vis; }
+function visibleEdges(vis){ return D.edges.filter(e=>vis.has(e.s)&&vis.has(e.t)&&(st.soft||!e.soft)&&(st.disabled || !e.flags.includes('disabled'))); }
+
+// ---------------- layout: callers/readers of the root on the left, what it leads to on the right
+function layout(vis){
+  const vkids=new Map(); vis.forEach(k=>vkids.set(k,[]));
+  const vpar=k=>{ let p=parent.get(k); while(p && !vis.has(p)) p=parent.get(p); return p; };
+  const order=[], seenW=new Set();
+  const walk=k=>{ if(seenW.has(k)) return; seenW.add(k); order.push(k); (children.get(k)||[]).forEach(walk); };
+  roots.forEach(walk);
+  for(const k of order){ if(!vis.has(k) || roots.includes(k)) continue; const p=vpar(k); if(p && vkids.has(p)) vkids.get(p).push(k); }
+  const dOf=k=>{ let d=0,p=k; while(p && !roots.includes(p)){ d++; p=vpar(p);} return d; };
+  POS=new Map();
+  const place=sd=>{ let slot=0; const ys=new Map();
+    const rec=k=>{ const ch=vkids.get(k); if(!ch.length){ const y=slot*ROWH; slot++; ys.set(k,y); return y; }
+      const cy=ch.map(rec); const y=(cy[0]+cy[cy.length-1])/2; ys.set(k,y); return y; };
+    const tops=roots.flatMap(r=>vkids.get(r).filter(c=>side.get(c)===sd)); tops.forEach(rec); return {ys,tops}; };
+  const R=place(1), Lf=place(-1);
+  const mid=res=>res.tops.length ? (res.ys.get(res.tops[0])+res.ys.get(res.tops[res.tops.length-1]))/2 : 0;
+  const rootY = R.tops.length ? mid(R) : mid(Lf); const lShift = rootY - mid(Lf);
+  R.ys.forEach((y,k)=>{ const d=dOf(k); POS.set(k,{x:d*COLW,y,c:d}); });
+  Lf.ys.forEach((y,k)=>{ const d=dOf(k); POS.set(k,{x:-d*COLW,y:y+lShift,c:-d}); });
+  roots.forEach((r,i)=>POS.set(r,{x:0,y:rootY+i*ROWH,c:0}));
+  let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  POS.forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
+  if(!POS.size){ x0=y0=0; x1=y1=1; }
+  return {x0,y0,w:x1-x0,h:y1-y0};
+}
+
+// ---------------- draw
+function draw(){
+  curVis=visibleNodes(); curEdges=visibleEdges(curVis); box=layout(curVis);
+  gE.textContent=''; gN.textContent='';
+  for(const e of curEdges){
+    const a=POS.get(e.s), b=POS.get(e.t); if(!a||!b) continue;
+    let x1,y1=a.y+NH/2,x2,y2=b.y+NH/2,d;
+    if(b.x>a.x){ x1=a.x+NW; x2=b.x; const m=Math.max(40,(x2-x1)*0.5); d=`M${x1},${y1} C${x1+m},${y1} ${x2-m},${y2} ${x2},${y2}`; }
+    else if(b.x<a.x){ x1=a.x; x2=b.x+NW; const m=Math.max(40,(x1-x2)*0.5); d=`M${x1},${y1} C${x1-m},${y1} ${x2+m},${y2} ${x2},${y2}`; }
+    else { x1=a.x+NW; x2=b.x+NW; const bulge=40+Math.min(300,Math.abs(y2-y1)*0.12); d=`M${x1},${y1} C${x1+bulge},${y1} ${x2+bulge},${y2} ${x2},${y2}`; }
+    const isTree = parent.get(e.t)===e.s || parent.get(e.s)===e.t;
+    const g=el('g',{class:['edge', e.soft?'soft':e.k, e.flags.includes('disabled')?'disabled':'', isTree?'':'xt'].join(' '),'data-i':e.i},gE);
+    const mk = e.soft?'arSoft':(e.k==='call'?'arCall':(e.k==='struct'?'arStruct':'arCond'));
+    el('path',{d,'marker-end':`url(#${mk})`},g);
+    el('title',{},g).textContent=`${byKey.get(e.s).name} → ${byKey.get(e.t).name}\n${e.ctx}${e.n>1?' ×'+e.n:''}\n${e.sites.map(s=>s.at).join('\n')}`;
+    if(st.labels){ const lx = b.x===a.x ? Math.max(x1,x2)+30 : (x1+x2)/2;
+      el('text',{x:lx,y:(y1+y2)/2-3,'text-anchor':'middle'},g).textContent =
+        cut((e.soft?'⇢ ':'') + e.ctx + (e.n>1?' ×'+e.n:'') + (e.flags.includes('tooltip_only')?t('ui.tooltip_only'):''), 22); }
+  }
+  for(const k of curVis){
+    const n=byKey.get(k), p=POS.get(k); if(!p) continue;
+    const col=COLORS[n.t]||'#777';
+    const cls='node'+(n.v==='boundary'?' boundary':'')+(n.dis?' disabled':'')+(n.v==='unjudged'?' pending':'')+(n.fresh?' fresh':'')+(st.multi.has(k)?' multi':'');
+    const g=el('g',{class:cls,transform:`translate(${p.x},${p.y})`,'data-k':k},gN);
+    el('rect',{class:'box',width:NW,height:NH,rx:7,fill:tint(col, n.v==='boundary'?0.08:(n.v==='unjudged'?0.1:0.18)),stroke:col},g);
+    el('rect',{x:0,y:0,width:6,height:NH,rx:3,fill:col},g);
+    const nm=el('text',{class:'nm',x:12,y:18},g);
+    nm.textContent = n.noloc ? cut(n.id,24) : cut(n.name,15);
+    if(n.noloc) el('tspan',{class:'badge',dx:4},nm).textContent=t('ui.noloc');
+    el('text',{class:'id',x:12,y:35},g).textContent = cut((n.noloc? n.tz : n.id),34);
+    const top=[];
+    if(n.v==='boundary') top.push(t('ui.boundary_badge')+(n.sys||''));
+    if(n.v==='unjudged') top.push(n.stopped ? t('ui.stopped_badge') : t('ui.pending_badge'));
+    if(n.fresh) top.push(t('ui.fresh_badge'));
+    if(top.length) el('text',{class:'badge',x:NW-4,y:-4,'text-anchor':'end'},g).textContent=top.join(' · ');
+    if(n.dis) el('text',{class:'badge',x:4,y:-4},g).textContent=t('ui.disabled_badge');
+    const ch=children.get(k);
+    if(ch && ch.length){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
+      el('circle',{r:8,fill:tint(col,0.5),stroke:col},tg);
+      el('text',{x:0,y:4,'text-anchor':'middle',style:'font-size:12px;fill:var(--ink);pointer-events:none'},tg).textContent = st.collapsed.has(k)?'+':'−';
+      tg.addEventListener('click',ev=>{ ev.stopPropagation(); if(st.collapsed.has(k)) st.collapsed.delete(k); else st.collapsed.add(k); draw(); }); }
+    el('title',{},g).textContent=`${n.name}\n${n.id}\n${n.tz}${n.v==='boundary'?'\n'+t('ui.boundary_badge')+n.sys:''}`;
+    g.addEventListener('click',ev=>{ ev.stopPropagation();
+      if(opts.editable && (ev.ctrlKey||ev.metaKey)){ if(st.multi.has(k)) st.multi.delete(k); else st.multi.add(k); draw(); showMulti(); return; }
+      st.multi.clear(); select(k); });
+  }
+  const cnt=$('cnt'); if(cnt) cnt.textContent = t('ui.count',{a:curVis.size,b:D.nodes.length,e:curEdges.length});
+  applySel(); applyTransform();
+}
+function applyTransform(){ vp.setAttribute('transform',`translate(${st.tx},${st.ty}) scale(${st.k})`); svg.classList.toggle('far', st.k<0.45); }
+function sideW(){ return $('side').style.display==='block'?470:0; }
+function fit(){ const r=svg.getBoundingClientRect();
+  const k=Math.min((r.width-sideW()-40)/Math.max(box.w,1),(r.height-40)/Math.max(box.h,1),1.2); st.k=Math.max(k,0.03);
+  st.tx=20-box.x0*st.k; st.ty=20-box.y0*st.k; applyTransform(); }
+function center(k){ const p=POS.get(k); if(!p) return; const r=svg.getBoundingClientRect();
+  st.k=Math.max(st.k,0.8); st.tx=(r.width-sideW())/2-(p.x+NW/2)*st.k; st.ty=r.height/2-(p.y+NH/2)*st.k; applyTransform(); }
+
+// ---------------- selection and side panel
+function applySel(){
+  const k=st.sel; const hot=new Set();
+  gE.querySelectorAll('.edge').forEach(g=>{ const e=D.edges[+g.dataset.i]; const on=k && (e.s===k||e.t===k);
+    g.classList.toggle('hot',!!on); g.classList.toggle('dim',!!k && !on); if(on){hot.add(e.s);hot.add(e.t);} });
+  gN.querySelectorAll('.node').forEach(g=>{ const kk=g.dataset.k; g.classList.toggle('sel',kk===k); g.classList.toggle('dim',!!k && !hot.has(kk) && kk!==k); });
+}
+function vname(v){ return L['v.'+v] || v; }
+function edgeRow(e,dir){ const o=dir==='out'?e.t:e.s; const on=byKey.get(o);
+  const sites=e.sites.map(s=>`<div><code>${esc(s.at)}</code> <span class="muted">${esc(s.rel)}${s.acc?'·'+(s.acc==='write'?t('ui.write'):t('ui.read')):''}</span><br><code>${esc(s.code)}</code>${s.via?`<br><span class="muted">${esc(t('ui.via_param',{c:s.via.callee,s:s.via.call_site}))}</span>`:''}</div>`).join('');
+  const kind = e.soft?t('ui.kind.soft'):t('ui.kind.'+e.k);
+  return `<div class="el"><span class="pill">${esc(kind)}</span>${dir==='out'?'→':'←'} <a data-go="${esc(o)}">${esc(on?on.name:o)}</a> <span class="muted">${esc(on?on.tz:'')}</span><br><b>${esc(e.ctx)}</b>${e.n>1?' ×'+e.n:''}${e.flags.length?' <span class="muted">['+e.flags.join(',')+']</span>':''}${e.soft?'<br><span class="muted">'+t('ui.reason')+esc(e.why)+'</span>':''}${sites}</div>`; }
+function actButtons(keys, cur){
+  if(!opts.editable) return '';
+  const b=(v,lab)=>`<button data-act="${v}" class="${cur===v?'on':''}">${esc(t(lab))}</button>`;
+  return `<div class="acts">${b('in','ui.act_in')}${b('boundary','ui.act_boundary')}${b('out','ui.act_out')}</div><div class="muted">${esc(t('ui.act_hint'))}<br>${esc(t('ui.multi_hint'))}</div>`;
+}
+function bindActs(panel, keys){
+  panel.querySelectorAll('[data-act]').forEach(btn=>btn.addEventListener('click',()=>{ if(opts.onJudge) opts.onJudge(keys, btn.dataset.act); }));
+}
+function showMulti(){
+  const panel=$('side'); if(!st.multi.size){ panel.style.display='none'; return; }
+  panel.style.display='block';
+  panel.innerHTML=`<button class="close" id="xClose">×</button><h2>${esc(t('ui.selected_n',{n:st.multi.size}))}</h2>${actButtons([...st.multi])}
+   <div>${[...st.multi].map(k=>'<div class="el">'+esc(byKey.get(k).name)+' <code>'+esc(k)+'</code></div>').join('')}</div>`;
+  bindActs(panel,[...st.multi]);
+  $('xClose').onclick=()=>{ st.multi.clear(); panel.style.display='none'; draw(); };
+}
+function select(k){
+  st.sel=k; applySel(); const n=byKey.get(k); const panel=$('side'); panel.style.display='block';
+  const outs=outE.get(k)||[], ins=inE.get(k)||[]; const hid=(D.hidden||{})[k]||[];
+  const lname = id => { const l=(D.meta.layers||[]).find(x=>x.id===id); return l ? l.name : id; };
+  const sites=n.sites.map(s=>`<div><code>${esc(s.file)}:${s.line}</code> <span class="muted">${esc(lname(s.root))} · ${esc(s.how)}${s.replaced?' · replaced':''}${s.ignored?' · ignored (duplicate)':''}</span></div>`).join('') || `<span class="muted">${esc(t('ui.undefined_site'))}</span>`;
+  const state = n.v==='unjudged' ? (n.stopped?t('ui.stopped_badge'):t('ui.pending_badge')) : vname(n.v);
+  panel.innerHTML = `<button class="close" id="xClose">×</button><h2>${esc(n.name)}${n.noloc?' <span class="pill">'+esc(t('ui.noloc_pill'))+'</span>':''}</h2>
+  <div class="sub">${esc(n.id)}</div>
+  <div style="margin-top:6px"><span class="pill">${esc(n.tz)}</span><span class="pill">${esc(state)}${n.sys?' · '+esc(n.sys):''}</span>${n.dis?'<span class="pill">'+esc(t('ui.disabled_badge'))+': '+esc(n.dis)+'</span>':''}</div>
+  ${actButtons([k], n.v)}
+  <div class="muted" style="margin-top:6px">${esc(t('ui.judgment'))}${esc(n.why)} <span class="pill">${esc(n.src)}</span>${n.from?'<br>'+t('ui.found_by',{x:'<a data-go="'+esc(n.from)+'">'+esc((byKey.get(n.from)||{}).name||n.from)+'</a>'}):''}</div>
+  ${n.ls?'<div class="muted">'+esc(t('ui.loc'))+esc(n.nk)+' @ '+esc(n.ls)+'</div>':''}
+  <h3>${esc(t('ui.def_sites'))}</h3>${sites}
+  ${n.code?'<h3>'+esc(t('ui.code'))+'</h3><pre>'+esc(n.code)+'</pre>':''}
+  <h3>${esc(t('ui.out_edges'))} (${outs.length})</h3>${outs.map(e=>edgeRow(e,'out')).join('')||'<span class="muted">'+esc(t('ui.none'))+'</span>'}
+  <h3>${esc(t('ui.in_edges'))} (${ins.length})</h3>${ins.map(e=>edgeRow(e,'in')).join('')||'<span class="muted">'+esc(t('ui.none'))+'</span>'}
+  <h3>${esc(t('ui.hidden_nb'))} (${hid.length})</h3>${hid.map(h=>`<div class="el">${h.d==='out'?'→':'←'} ${esc(h.name)} <code>${esc(h.o)}</code><br><b>${esc(h.ctx)}</b> <code>${esc(h.at)}</code><br><span class="muted">${esc(vname(h.v))}${h.why?': '+esc(h.why):''}</span></div>`).join('')||'<span class="muted">'+esc(t('ui.none'))+'</span>'}`;
+  panel.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',()=>goTo(a.dataset.go)));
+  bindActs(panel,[k]);
+  $('xClose').onclick=()=>{ panel.style.display='none'; st.sel=null; applySel(); };
+}
+function goTo(k){ if(!byKey.has(k)) return; const n=byKey.get(k);
+  let p=parent.get(k); while(p){ st.collapsed.delete(p); p=parent.get(p); }
+  st.types.add(grp(n.t)); syncLegend(); if(n.dis) st.disabled=true; if(n.v==='boundary') st.boundary=true; syncOpts();
+  draw(); center(k); select(k);
+  const g=gN.querySelector(`.node[data-k="${CSS.escape(k)}"]`); if(g){ g.classList.add('flash'); setTimeout(()=>g.classList.remove('flash'),1400);} }
+
+// ---------------- legend, options, search
+function syncLegend(){ document.querySelectorAll('#legend input[data-t]').forEach(i=>i.checked=st.types.has(i.dataset.t)); }
+function buildLegend(){
+  const legend=$('legend'); if(!legend) return;
+  const cnt={}; D.nodes.forEach(n=>{ const g=grp(n.t); cnt[g]=(cnt[g]||0)+1; });
+  const open = !legend.dataset.folded;
+  let h=`<div id="lgHead" style="cursor:pointer"><b>${esc(t('ui.legend'))}</b> <span class="muted">${esc(t('ui.legend_hint'))}</span></div><div id="lgBody" style="${open?'':'display:none'}">`;
+  for(const g of GROUPS){ if(!cnt[g]) continue; const c=COLORS[g]||'#777';
+    h+=`<label class="row"><input type="checkbox" data-t="${g}" ${st.types.has(g)?'checked':''}><span class="sw" style="background:${tint(c,.18)};border-color:${c}"></span>${esc(groupLabel(g))} <span class="muted">${cnt[g]}</span></label>`; }
+  h+=`<div class="lines" style="margin-top:6px"><b>${esc(t('ui.edges'))}</b>
+  <div><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--call)" stroke-width="2"/></svg>${esc(t('ui.e_call'))}</div>
+  <div><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--cond)" stroke-width="2"/></svg>${esc(t('ui.e_cond'))}</div>
+  <div><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--struct)" stroke-width="3"/></svg>${esc(t('ui.e_struct'))}</div>
+  <div><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--soft)" stroke-width="2" stroke-dasharray="6 4"/></svg>${esc(t('ui.e_soft'))}</div>
+  <div><svg width="34" height="14"><rect x="1" y="1" width="32" height="12" rx="3" fill="none" stroke="var(--ink2)" stroke-dasharray="4 2"/></svg>${esc(t('ui.e_boundary'))}</div>
+  <div class="muted" style="white-space:normal;max-width:230px">${esc(t('ui.legend_note'))}</div></div></div>`;
+  legend.innerHTML=h;
+  legend.querySelectorAll('input[data-t]').forEach(i=>i.addEventListener('change',()=>{ if(i.checked) st.types.add(i.dataset.t); else st.types.delete(i.dataset.t); draw(); }));
+  $('lgHead').onclick=()=>{ const b=$('lgBody'); const fold=b.style.display!=='none'; b.style.display=fold?'none':''; legend.dataset.folded=fold?'1':''; };
+}
+function syncOpts(){ const m={optLabels:'labels',optSoft:'soft',optBoundary:'boundary',optDisabled:'disabled'};
+  for(const id in m){ const e=$(id); if(e) e.checked=st[m[id]]; } }
+function placeChrome(){ const top=$('top'); const h=top?top.offsetHeight:0;
+  ['stage','side'].forEach(id=>{ const e=$(id); if(e) e.style.top=h+'px'; }); const r=$('results'); if(r) r.style.top=(h+2)+'px'; }
+function foldTo(level){ st.collapsed.clear(); depth.forEach((d,k)=>{ if(d===level && (children.get(k)||[]).length) st.collapsed.add(k); }); }
+
+function init(o){
+  opts=o||{}; L=opts.L||{};
+  svg=$('svg'); vp=$('vp'); gE=$('gE'); gN=$('gN');
+  const setText=(id,k)=>{ const e=$(id); if(e) e.textContent=t(k); };
+  const q=$('q'); if(q) q.placeholder=t('ui.search_ph');
+  for(const [id,k] of [['tLabels','ui.labels'],['tAllLabels','ui.cross_labels'],['tSoft','ui.soft'],['tBoundary','ui.boundary'],['tDisabled','ui.disabled'],
+    ['btnFit','ui.fit'],['btnExpand','ui.expand_all'],['btnFold','ui.fold3'],['btnTheme','ui.theme_toggle']]) setText(id,k);
+  const al=$('lblAllLabels'); if(al) al.title=t('ui.cross_labels_tip');
+  const bind=(id,f,ev)=>{ const e=$(id); if(e) e[ev||'onclick']=f; };
+  bind('optLabels',ev=>{st.labels=ev.target.checked; draw();},'onchange');
+  bind('optAllLabels',ev=>{ svg.classList.toggle('allLabels', ev.target.checked); },'onchange');
+  bind('optSoft',ev=>{st.soft=ev.target.checked; draw();},'onchange');
+  bind('optBoundary',ev=>{st.boundary=ev.target.checked; draw();},'onchange');
+  bind('optDisabled',ev=>{st.disabled=ev.target.checked; draw();},'onchange');
+  bind('btnFit',()=>fit());
+  bind('btnExpand',()=>{ st.collapsed.clear(); draw(); });
+  bind('btnFold',()=>{ foldTo(3); draw(); fit(); });
+  bind('btnTheme',()=>{ const r=document.documentElement; r.setAttribute('data-theme', isDark()?'light':'dark'); buildLegend(); draw(); });
+  const res=$('results');
+  if(q && res){
+    q.addEventListener('input',()=>{ const s=q.value.trim().toLowerCase(); if(!s){ res.style.display='none'; return; }
+      const hits=D.nodes.filter(n=>String(n.name).toLowerCase().includes(s)||n.id.toLowerCase().includes(s)).slice(0,60);
+      res.innerHTML = hits.map(n=>`<div data-k="${esc(n.k)}"><b>${esc(n.name)}</b> <span class="muted">${esc(n.tz)}</span><br><code>${esc(n.id)}</code></div>`).join('') || `<div class="muted">${esc(t('ui.no_match'))}</div>`;
+      res.style.display='block'; res.querySelectorAll('[data-k]').forEach(d=>d.onclick=()=>{ res.style.display='none'; goTo(d.dataset.k); }); });
+    q.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); const s=q.value.trim().toLowerCase();
+        const f=D.nodes.find(n=>n.id.toLowerCase()===s) || D.nodes.find(n=>String(n.name).toLowerCase().includes(s)||n.id.toLowerCase().includes(s));
+        if(f){ res.style.display='none'; goTo(f.k);} } if(ev.key==='Escape') res.style.display='none'; });
+  }
+  let drag=null;
+  svg.addEventListener('mousedown',ev=>{ drag={x:ev.clientX,y:ev.clientY,tx:st.tx,ty:st.ty,moved:false}; svg.classList.add('drag'); });
+  window.addEventListener('mousemove',ev=>{ if(!drag) return; const dx=ev.clientX-drag.x, dy=ev.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true;
+    st.tx=drag.tx+dx; st.ty=drag.ty+dy; applyTransform(); });
+  window.addEventListener('mouseup',()=>{ svg.classList.remove('drag'); setTimeout(()=>{drag=null;},0); });
+  svg.addEventListener('click',()=>{ if(drag && drag.moved) return; if(st.sel || st.multi.size){ st.sel=null; st.multi.clear(); applySel(); $('side').style.display='none'; draw(); } if(res) res.style.display='none'; });
+  svg.addEventListener('wheel',ev=>{ ev.preventDefault(); const r=svg.getBoundingClientRect(); const mx=ev.clientX-r.left, my=ev.clientY-r.top;
+    const f=Math.exp(-ev.deltaY*0.0015); const k=Math.min(4,Math.max(0.03,st.k*f)); st.tx=mx-(mx-st.tx)*k/st.k; st.ty=my-(my-st.ty)*k/st.k; st.k=k; applyTransform(); },{passive:false});
+  let touch=null;
+  svg.addEventListener('touchstart',ev=>{ if(ev.touches.length===1) touch={x:ev.touches[0].clientX,y:ev.touches[0].clientY,tx:st.tx,ty:st.ty}; },{passive:true});
+  svg.addEventListener('touchmove',ev=>{ if(touch&&ev.touches.length===1){ st.tx=touch.tx+ev.touches[0].clientX-touch.x; st.ty=touch.ty+ev.touches[0].clientY-touch.y; applyTransform(); } },{passive:true});
+  window.addEventListener('resize',placeChrome); placeChrome();
+}
+function load(data, keepView){
+  D=data; buildTree();
+  if(!keepView){ st.collapsed.clear(); st.sel=null; st.multi.clear(); foldTo(3); }
+  else { [...st.collapsed].forEach(k=>{ if(!byKey.has(k)) st.collapsed.delete(k); }); [...st.multi].forEach(k=>{ if(!byKey.has(k)) st.multi.delete(k); }); }
+  const ttl=$('ttl'); if(ttl) ttl.textContent=D.meta.title||'';
+  const thm=$('thm'); if(thm) thm.textContent=D.meta.theme ? t('ui.theme_prefix')+D.meta.theme : '';
+  buildLegend(); placeChrome(); draw();
+  if(!keepView){ fit(); if(st.k<0.3 && roots.length){ st.k=0.6; center(roots[0]); } }
+  if(keepView && st.sel && byKey.has(st.sel)) select(st.sel); else if(keepView && st.sel){ st.sel=null; $('side').style.display='none'; }
+}
+return {init, load, fit, goTo, placeChrome, state: st};
+})();

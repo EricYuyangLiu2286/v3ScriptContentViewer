@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "game": {
+    "path": "D:/Program Files (x86)/Steam/steamapps/common/Victoria 3"
+  },
+  "mods": [
+    {
+      "path": "D:/Users/Eric Liu/Documents/Paradox Interactive/Victoria 3/mod/Neo-Era Southern and Northern Dynasties",
+      "name": "Neo-Era Southern and Northern Dynasties"
+    }
+  ],
+  "load_order_source": "manual",
+  "languages": [
+    "simp_chinese",
+    "english"
+  ],
+  "ui_language": "zh",
+  "output_dir": "D:/Users/Eric Liu/Documents/Paradox Interactive/Victoria 3/nesnd-workbench/reports/content-tree/v3tree-output",
+  "script_docs_dir": null,
+  "ignore": [],
+  "extra_folders": {},
+  "detected": {
+    "game_version": "1.15.0",
+    "steam_build": "26453692",
+    "checked": "2026-11-08T19:39"
+  }
+}

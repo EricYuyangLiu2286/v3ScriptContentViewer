@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="__LANG__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3tree</title>
+<style>
+/*__CSS__*/
+#pane{position:fixed;left:0;right:0;bottom:0;top:48px;overflow:auto;padding:18px 22px;z-index:3;background:var(--bg)}
+#pane h2{font-size:17px;margin:4px 0 12px}
+#pane h3{font-size:14px;margin:20px 0 8px}
+#pane .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;max-width:980px}
+#pane label.f{display:block;margin:10px 0 4px;color:var(--ink2)}
+#pane input[type=text],#pane input[type=number],#pane select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+#pane input[type=text]{width:min(720px,100%)}
+#pane button,#top button{padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);cursor:pointer;font:inherit}
+#pane button.primary,#top button.primary{background:var(--call);border-color:var(--call);color:#fff}
+#pane button:disabled{opacity:.5;cursor:default}
+#pane table{border-collapse:collapse;width:100%}
+#pane td,#pane th{border-bottom:1px solid var(--line);padding:6px 6px;text-align:left;vertical-align:top}
+.modrow{display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap}
+.modrow .p{font-family:var(--mono);font-size:12px;color:var(--ink2);word-break:break-all;flex:1;min-width:200px}
+.msgs div{margin:3px 0}.msgs .error{color:#d64545}.msgs .note{color:var(--ink2)}.msgs .ok{color:var(--struct)}
+#sugg{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:6px;max-height:300px;overflow:auto;width:min(720px,90vw);z-index:9;display:none}
+#sugg div{padding:5px 8px;cursor:pointer;border-bottom:1px solid var(--line)}#sugg div:hover{background:var(--bg)}
+#toast{position:fixed;right:16px;bottom:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;z-index:20;display:none;max-width:520px;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+#sessBar{display:none;gap:8px 12px;align-items:center;flex-wrap:wrap}
+#sessBar input[type=number]{width:56px;padding:4px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.hidden{display:none!important}
+.nav button.on{border-color:var(--hl);font-weight:600}
+</style>
+</head>
+<body>
+<div id="top">
+  <h1 id="ttl">v3tree</h1>
+  <div class="nav"><button id="navStart"></button> <button id="navSettings"></button></div>
+  <div class="theme" id="thm"></div>
+  <div id="sessBar">
+    <input type="search" id="q">
+    <label><span id="tSteps"></span> <input type="number" id="steps" min="1" max="10" value="3"></label>
+    <button id="btnSearch" class="primary"></button>
+    <button id="btnUndo"></button>
+    <button id="btnSignoff"></button>
+    <span class="muted" id="counts"></span>
+    <label><input type="checkbox" id="optLabels" checked> <span id="tLabels"></span></label>
+    <label id="lblAllLabels"><input type="checkbox" id="optAllLabels"> <span id="tAllLabels"></span></label>
+    <label><input type="checkbox" id="optBoundary" checked> <span id="tBoundary"></span></label>
+    <label><input type="checkbox" id="optDisabled"> <span id="tDisabled"></span></label>
+    <button id="btnFit"></button><button id="btnExpand"></button><button id="btnFold"></button><button id="btnTheme"></button>
+    <span class="muted" id="cnt"></span>
+  </div>
+</div>
+<div id="results"></div>
+<div id="stage" class="hidden"><svg id="svg"><defs>
+  <marker id="arCall" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--call)"/></marker>
+  <marker id="arCond" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--cond)"/></marker>
+  <marker id="arStruct" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--struct)"/></marker>
+  <marker id="arSoft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--soft)"/></marker>
+</defs><g id="vp"><g id="gE"></g><g id="gN"></g></g></svg></div>
+<div id="legend" class="hidden"></div>
+<div id="side"></div>
+<div id="pane"></div>
+<div id="sugg"></div>
+<div id="toast"></div>
+<script id="strings" type="application/json">/*__L__*/null</script>
+<script>
+/*__VIEWER__*/
+</script>
+<script>
+(function(){
+'use strict';
+const TOKEN='__TOKEN__';
+const L=JSON.parse(document.getElementById('strings').textContent);
+const t=(k,o)=>{ let s=(k in L)?L[k]:k; if(o) for(const x in o) s=s.split('{'+x+'}').join(o[x]); return s; };
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ST=null, draft=null, cur=null, curMeta=null, viewerReady=false, view='start';
+
+async function api(path, body){
+  const r=await fetch(path+(path.includes('?')?'&':'?')+'t='+encodeURIComponent(TOKEN),
+    {method: body!==undefined?'POST':'GET', headers:{'X-Token':TOKEN,'Content-Type':'application/json'}, body: body!==undefined?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({error:r.statusText}));
+  if(!r.ok || d.error) throw new Error(d.error||r.statusText);
+  return d;
+}
+function toast(html, ms){ const e=$('toast'); e.innerHTML=html; e.style.display='block'; clearTimeout(e._t); if(ms) e._t=setTimeout(()=>e.style.display='none',ms); }
+function busy(on){ document.body.style.cursor=on?'progress':''; if(on) toast(esc(t('ui.working'))); else $('toast').style.display='none'; }
+async function guard(fn){ try{ busy(true); const r=await fn(); busy(false); return r; } catch(e){ busy(false); toast('<b>Error</b><br>'+esc(e.message)); throw e; } }
+
+// ---------------- views
+function show(v){
+  view=v; const sess=v==='session';
+  $('pane').classList.toggle('hidden',sess); $('stage').classList.toggle('hidden',!sess); $('legend').classList.toggle('hidden',!sess);
+  $('sessBar').style.display=sess?'flex':'none'; if(!sess){ $('side').style.display='none'; $('thm').textContent=''; $('ttl').textContent='v3tree'; }
+  $('navStart').classList.toggle('on',v==='start'); $('navSettings').classList.toggle('on',v==='settings');
+  CTViewer.placeChrome(); $('pane').style.top=$('top').offsetHeight+'px';
+  if(v==='settings') renderSettings(); if(v==='start') renderStart();
+}
+
+// ---------------- settings
+function renderSettings(){
+  const c=draft || (draft=JSON.parse(JSON.stringify(ST.config)));
+  const idx=ST.index;
+  const idxLine = idx.exists ? t('ui.index_ready',{n:idx.nodes,e:idx.edges,v:idx.game_version||'?',t:idx.built})+(idx.stale?' — '+t('ui.index_stale'):'') : t('ui.index_none');
+  $('pane').innerHTML=`<div class="card"><h2>${esc(t('ui.settings'))}</h2>
+   <label class="f">${esc(t('ui.game_path'))}</label>
+   <input type="text" id="sGame" value="${esc((c.game||{}).path||'')}"> <button id="sFind">${esc(t('ui.find_game'))}</button>
+   <label class="f">${esc(t('ui.mods'))}</label><div id="sMods"></div>
+   <div class="modrow"><input type="text" id="sAdd" placeholder="D:/.../mod/My Mod"> <button id="sAddBtn">${esc(t('ui.add_mod'))}</button>
+     ${ST.launcher_found?`<button id="sImport">${esc(t('ui.import_launcher'))}</button>`:''}</div>
+   <label class="f">${esc(t('ui.languages'))}</label><input type="text" id="sLangs" value="${esc((c.languages||[]).join(', '))}">
+   <label class="f">${esc(t('ui.ui_language'))}</label><select id="sUi"><option value="zh"${c.ui_language==='zh'?' selected':''}>中文</option><option value="en"${c.ui_language!=='zh'?' selected':''}>English</option></select>
+   <label class="f">${esc(t('ui.output_dir'))}</label><input type="text" id="sOut" value="${esc(c.output_dir||'')}">
+   <p><button class="primary" id="sSave">${esc(t('ui.save'))}</button> <span class="muted" id="sHint"></span></p>
+   <div class="msgs" id="sMsgs"></div><p class="muted">${esc(ST.config_path)}</p></div>
+   <div class="card"><h3>${esc(t('ui.build_index'))}</h3><p id="sIdx">${esc(idxLine)}</p>
+   <button id="sBuild" class="primary">${esc(t('ui.build_index'))}</button> <span class="muted" id="sProg"></span></div>`;
+  drawMods();
+  const sync=()=>{ c.game={path:$('sGame').value.trim()}; c.languages=$('sLangs').value.split(',').map(x=>x.trim()).filter(Boolean);
+    c.ui_language=$('sUi').value; c.output_dir=$('sOut').value.trim(); checkOne(); };
+  ['sGame','sLangs','sUi','sOut'].forEach(id=>$(id).addEventListener('input',sync));
+  $('sUi').addEventListener('change',sync);
+  $('sFind').onclick=async()=>{ const r=await guard(()=>api('/api/find_game',{})); if(r.path){ $('sGame').value=r.path; sync(); } };
+  $('sAddBtn').onclick=async()=>{ const p=$('sAdd').value.trim(); if(!p) return; const info=await guard(()=>api('/api/mod_info',{path:p}));
+    c.mods=(c.mods||[]).concat([{path:p,name:info.name}]); c.load_order_source='manual'; $('sAdd').value=''; drawMods(); checkOne(); };
+  if($('sImport')) $('sImport').onclick=async()=>{ const r=await guard(()=>api('/api/import_launcher',{mods:c.mods})); if(r.mods){ c.mods=r.mods; c.load_order_source='launcher'; drawMods(); checkOne(); } };
+  $('sSave').onclick=async()=>{ sync(); const r=await guard(()=>api('/api/config',{config:c}));
+    $('sMsgs').innerHTML=r.lines.map(([lv,tx])=>`<div class="${lv}">${esc(tx)}</div>`).join('');
+    if(r.saved){ const langChanged=ST.config.ui_language!==c.ui_language; ST=r.state; draft=null; if(langChanged){ location.reload(); return; }
+      $('sIdx').textContent = ST.index.exists ? t('ui.index_ready',{n:ST.index.nodes,e:ST.index.edges,v:ST.index.game_version||'?',t:ST.index.built})+(ST.index.stale?' — '+t('ui.index_stale'):'') : t('ui.index_none');
+      toast(esc(t('ui.saved')),1500); } };
+  $('sBuild').onclick=buildIndex;
+  checkOne();
+}
+function checkOne(){ const c=draft; const ok=!!((c.game||{}).path) || (c.mods||[]).length>0;
+  $('sSave').disabled=!ok; $('sHint').textContent=ok?'':t('ui.need_one_path'); }
+function drawMods(){
+  const c=draft; const box=$('sMods');
+  box.innerHTML=(c.mods||[]).map((m,i)=>`<div class="modrow"><b>${i+1}.</b> ${esc(m.name)} <span class="p">${esc(m.path)}</span>
+    <button data-up="${i}">${esc(t('ui.up'))}</button><button data-down="${i}">${esc(t('ui.down'))}</button><button data-rm="${i}">${esc(t('ui.remove'))}</button></div>`).join('')||'<div class="muted">—</div>';
+  box.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.up; if(i>0){ [c.mods[i-1],c.mods[i]]=[c.mods[i],c.mods[i-1]]; c.load_order_source='manual'; drawMods(); } });
+  box.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.down; if(i<c.mods.length-1){ [c.mods[i+1],c.mods[i]]=[c.mods[i],c.mods[i+1]]; c.load_order_source='manual'; drawMods(); } });
+  box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ c.mods.splice(+b.dataset.rm,1); drawMods(); checkOne(); });
+}
+async function buildIndex(){
+  await guard(()=>api('/api/index',{}));
+  $('sBuild').disabled=true;
+  const tick=async()=>{ const p=await api('/api/index_progress');
+    if($('sProg')) $('sProg').textContent = p.running ? `${p.done}/${p.total} ${p.folder}` : (p.error ? 'Error: '+p.error : '');
+    if(p.running){ setTimeout(tick,700); return; }
+    ST.index=p.status; if($('sBuild')) $('sBuild').disabled=false;
+    if($('sIdx')) $('sIdx').textContent = ST.index.exists ? t('ui.index_ready',{n:ST.index.nodes,e:ST.index.edges,v:ST.index.game_version||'?',t:ST.index.built}) : t('ui.index_none'); };
+  tick();
+}
+
+// ---------------- start: new search + sessions
+const STOP_TYPES=['tag','chartemplate','culture','law','ideology','onaction','pop'];
+function renderStart(){
+  if(!ST.index.exists){ $('pane').innerHTML=`<div class="card"><p>${esc(t('ui.need_index'))}</p><button class="primary" id="goSet">${esc(t('ui.settings'))}</button></div>`; $('goSet').onclick=()=>show('settings'); return; }
+  const cases=ST.cases||[];
+  $('pane').innerHTML=`<div class="card"><h2>${esc(t('ui.new_search'))}</h2>
+   <label class="f">${esc(t('ui.root'))}</label><input type="text" id="nRoot" placeholder="${esc(t('ui.root_ph'))}" autocomplete="off">
+   <label class="f">${esc(t('ui.theme_label'))}</label><input type="text" id="nTheme">
+   <label class="f">${esc(t('ui.session_name'))}</label><input type="text" id="nName">
+   <label class="f">${esc(t('ui.steps'))} (1–10)</label><input type="number" id="nSteps" min="1" max="10" value="3">
+   <label class="f">${esc(t('ui.stop_hub'))}</label><input type="number" id="nHub" min="0" value="40">
+   <label class="f">${esc(t('ui.stop_types'))}</label><div>${STOP_TYPES.map(x=>`<label style="margin-right:10px"><input type="checkbox" data-st="${x}" checked> ${esc(t('type.'+x))}</label>`).join('')}</div>
+   <p><label><input type="checkbox" id="nVan" checked> ${esc(t('ui.stop_vanilla'))}</label></p>
+   <p><button class="primary" id="nGo">${esc(t('ui.start'))}</button> <span class="muted">${esc(ST.index.stale?t('ui.index_stale'):'')}</span></p></div>
+   <div class="card"><h2>${esc(t('ui.sessions'))}</h2>${cases.length?`<table><tr><th>${esc(t('ui.session_name'))}</th><th>${esc(t('ui.root'))}</th><th></th></tr>
+   ${cases.map(c=>`<tr><td><b>${esc(c.name)}</b><br><span class="muted">${esc(c.theme||'')}</span></td><td><code>${esc((c.roots||[]).join(', '))}</code><br><span class="muted">${c.mode==='ui'?'UI':'AI'}${c.accepted?' · ✔':''}</span></td>
+     <td>${c.mode==='ui'?`<button data-open="${esc(c.name)}">${esc(t('ui.open'))}</button> `:''}${c.has_map?`<button data-map="${esc(c.name)}">${esc(t('ui.open_map'))}</button> `:''}<button data-folder="${esc(c.name)}">${esc(t('ui.open_folder'))}</button> <button data-del="${esc(c.name)}">${esc(t('ui.delete'))}</button></td></tr>`).join('')}</table>`:'<p class="muted">—</p>'}</div>`;
+  const root=$('nRoot'), sugg=$('sugg');
+  let timer=null;
+  root.addEventListener('input',()=>{ clearTimeout(timer); timer=setTimeout(async()=>{ const v=root.value.trim(); if(!v){ sugg.style.display='none'; return; }
+    const hits=await api('/api/suggest?q='+encodeURIComponent(v)); const r=root.getBoundingClientRect();
+    sugg.style.left=r.left+'px'; sugg.style.top=(r.bottom+2)+'px';
+    sugg.innerHTML=hits.map(h=>`<div data-id="${esc(h.id)}"><b>${esc(h.name)}</b> <span class="muted">${esc(h.type||'')}</span><br><code>${esc(h.id)}</code></div>`).join('')||`<div class="muted">${esc(t('ui.not_found'))}</div>`;
+    sugg.style.display='block'; sugg.querySelectorAll('[data-id]').forEach(d=>d.onclick=()=>{ root.value=d.dataset.id; if(!$('nName').value) $('nName').value=d.dataset.id; sugg.style.display='none'; }); },200); });
+  root.addEventListener('blur',()=>setTimeout(()=>sugg.style.display='none',200));
+  $('nGo').onclick=async()=>{ const rootv=root.value.trim(); if(!rootv) return;
+    const stop={hub:+$('nHub').value||0, vanilla:$('nVan').checked, types:[...document.querySelectorAll('[data-st]')].filter(x=>x.checked).map(x=>x.dataset.st)};
+    const steps=Math.max(1,Math.min(10,+$('nSteps').value||3));
+    const d=await guard(()=>api('/api/session_new',{root:rootv,theme:$('nTheme').value,name:$('nName').value||rootv,steps,stop}));
+    openSession(d, false); };
+  document.querySelectorAll('[data-open]').forEach(b=>b.onclick=async()=>{ const d=await guard(()=>api('/api/session?name='+encodeURIComponent(b.dataset.open))); openSession(d,false); });
+  document.querySelectorAll('[data-map]').forEach(b=>b.onclick=()=>window.open('/view/'+encodeURIComponent(b.dataset.map)+'/map.html?t='+encodeURIComponent(TOKEN)));
+  document.querySelectorAll('[data-folder]').forEach(b=>b.onclick=()=>guard(()=>api('/api/open_folder',{name:b.dataset.folder})));
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(!confirm(t('ui.delete_confirm',{n:b.dataset.del}))) return;
+    const r=await guard(()=>api('/api/delete',{name:b.dataset.del})); ST.cases=r.cases; renderStart(); });
+}
+
+// ---------------- session
+function sessionName(d){ return d.meta.title; }
+function openSession(d, keep){
+  cur=sessionName(d); curMeta=d.meta;
+  show('session');
+  if(!viewerReady){ CTViewer.init({L, editable:true, onJudge}); viewerReady=true; }
+  CTViewer.load(d, keep);
+  const c=d.meta.counts||{}; $('counts').textContent=t('ui.round',{n:d.meta.round})+' · '+t('ui.status_counts',c);
+  $('btnUndo').disabled=!d.meta.can_undo;
+}
+async function onJudge(keys, verdict){
+  const d=await guard(()=>api('/api/judge',{name:cur,keys,verdict})); CTViewer.state.multi.clear(); openSession(d,true);
+}
+function initBar(){
+  $('navStart').textContent=t('ui.sessions')+' / '+t('ui.new_search'); $('navSettings').textContent=t('ui.settings');
+  $('tSteps').textContent=t('ui.steps'); $('btnSearch').textContent=t('ui.continue'); $('btnUndo').textContent=t('ui.undo'); $('btnSignoff').textContent=t('ui.signoff');
+  $('navStart').onclick=async()=>{ ST=await api('/api/state'); show('start'); };
+  $('navSettings').onclick=async()=>{ ST=await api('/api/state'); draft=null; show('settings'); };
+  $('btnSearch').onclick=async()=>{ const steps=Math.max(1,Math.min(10,+$('steps').value||3));
+    const d=await guard(()=>api('/api/search',{name:cur,steps})); openSession(d,true); };
+  $('btnUndo').onclick=async()=>{ const d=await guard(()=>api('/api/undo',{name:cur})); openSession(d,true); };
+  $('btnSignoff').onclick=async()=>{ if(!confirm(t('ui.signoff_confirm'))) return;
+    const r=await guard(()=>api('/api/signoff',{name:cur}));
+    toast(`${esc(t('ui.done',{p:r.map}))}<br><button id="tMap">${esc(t('ui.open_map'))}</button> <button id="tFolder">${esc(t('ui.open_folder'))}</button>`);
+    $('tMap').onclick=()=>window.open('/view/'+encodeURIComponent(cur)+'/map.html?t='+encodeURIComponent(TOKEN));
+    $('tFolder').onclick=()=>api('/api/open_folder',{name:cur});
+    const d=await api('/api/session?name='+encodeURIComponent(cur)); openSession(d,true); };
+}
+
+(async function boot(){
+  initBar();
+  CTViewer.placeChrome();
+  ST=await api('/api/state');
+  const c=ST.config; const hasPath=!!((c.game||{}).path) || (c.mods||[]).length>0;
+  show(!hasPath || !ST.index.exists ? 'settings' : 'start');
+})();
+window.addEventListener('resize',()=>{ $('pane').style.top=$('top').offsetHeight+'px'; });
+})();
+</script>
+</body>
+</html>
