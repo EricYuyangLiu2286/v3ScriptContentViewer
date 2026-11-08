@@ -1,0 +1,8 @@
+config/local.json
+output/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.v3tree-test/
