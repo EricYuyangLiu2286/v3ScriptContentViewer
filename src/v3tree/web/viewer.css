@@ -52,6 +52,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .edge text{font-size:9.5px;fill:var(--ink2);paint-order:stroke;stroke:var(--bg);stroke-width:3px}
 .edge.xt path{opacity:.18}
 .edge.xt text{display:none}
+.edge.gl path{opacity:.4}
+.edge.gl text{display:none}
+.edge.gl.hot path{opacity:1}
+.edge.gl.hot text{display:inline}
 .allLabels .edge.xt text{display:inline}
 .edge.xt.hot path{opacity:1}
 .edge.xt.hot text{display:inline}

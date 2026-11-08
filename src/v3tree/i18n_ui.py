@@ -64,6 +64,13 @@ UI = {
     'ui.act_in': ('接受', 'Accept'),
     'ui.act_boundary': ('只画不展开', "Draw, don't expand"),
     'ui.act_out': ('去掉', 'Remove'),
+    'ui.layout_compact': ('排列：紧凑', 'Layout: compact'),
+    'ui.layout_tree': ('排列：标准', 'Layout: tree'),
+    'ui.layout_tip': ('点击切换。紧凑：同一节点下的子节点太多时，把它们连同各自的子树分成几列并排摆放，整张图更接近屏幕比例。'
+                      '标准：所有子节点排成一列。',
+                      'Click to switch. Compact: when a node has many children, they and their subtrees are wrapped '
+                      'into several columns side by side, so the map comes out closer to screen shape. '
+                      'Tree: all children in one column.'),
     'ui.root_fixed': ('根节点是这张图的起点，不能去掉或设为边界。要换根节点，请新建一次搜索。',
                       'The root is where this map starts; it cannot be removed or made a boundary. '
                       'To change the root, start a new search.'),

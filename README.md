@@ -17,7 +17,7 @@ It is for modders who have lost track of a large system: chains rewritten many t
 
 - **Languages.** The interface and reports are in English and Chinese. The map shows `english` and `simp_chinese` localisation; other languages are untested. If you work in another language, ask your AI agent to add it. The interface language and the localisation languages are two separate settings, and names and type labels are stored when the index is built: after changing either, **rebuild the index**.
 - **What it maps.** Script content only: journal entries, events, decisions, triggers, effects, variables, modifiers, laws, pop moves, flag definitions and the like. It does not read GUI files, the map, buildings or production methods, and it does not run the game. Don't expect it to pick up everything; see [Limitations](docs/en/limitations.md).
-- **Performance.** Maps with many links (roughly 1,000+ nodes, or nodes with heavy fan-out) lag in the browser. Be patient, as we all are with Victoria 3 itself, or fold levels and filter types to lighten the map.
+- **Performance.** Maps with many links (roughly 1,000+ nodes, or nodes with heavy fan-out) lag in the browser. Be patient, as we all are with Victoria 3 itself, or fold levels and filter types to lighten the map. **Layout: compact** (the default) wraps long lists into columns so a big map fits the window instead of becoming a thin strip.
 
 ## Install
 

@@ -5,6 +5,8 @@ window.CTViewer = (function(){
 let L = {};
 const t = (k, o) => { let s = (k in L) ? L[k] : k; if(o) for(const x in o) s = s.split('{'+x+'}').join(o[x]); return s; };
 const NW = 214, NH = 44, GX = 150, GY = 22, COLW = NW + GX, ROWH = NH + GY;
+// compact layout: wrap siblings once they stack taller than WRAP_MIN_H; gap between wrapped columns; target width/height
+const WRAP_MIN_H = 6 * ROWH, WRAP_GAP = 40, ASPECT = 1.6;   // ASPECT is used when the window size is unknown
 const COLORS = {je:'#d64545',button:'#ef8a2b',bar:'#c9a227',event:'#3b7dd8',decision:'#9b59b6',law:'#1aa38c',dp:'#b0446e',
   wargoal:'#b0446e',modifier:'#5f9a32',var:'#8a8f98',gvar:'#6f747d',onaction:'#21a9b6',seffect:'#5b6ee1',strigger:'#8e7cc3',
   svalue:'#8e7cc3',tag:'#a0522d',chartemplate:'#c4627a',customloc:'#7a8a99',history:'#555b66',culture:'#8d6e63',pop:'#8d6e63',
@@ -28,7 +30,8 @@ function tint(hex,a){ const n=parseInt(hex.slice(1),16); const r=n>>16,g=(n>>8)&
 let opts = {}, D = null, byKey, roots, outE, inE, parent, children, side, depth;
 let POS = new Map(), curEdges = [], curVis = new Set(), box = {x0:0,y0:0,w:0,h:0};
 const st = { types:new Set(GROUPS), labels:true, soft:true, boundary:true, disabled:false,
-  collapsed:new Set(), sel:null, multi:new Set(), k:1, tx:40, ty:40 };
+  collapsed:new Set(), sel:null, multi:new Set(), k:1, tx:40, ty:40, layout:'compact' };
+try { const v=localStorage.getItem('v3tree.layout'); if(v==='tree'||v==='compact') st.layout=v; } catch(e){}
 let svg, vp, gE, gN;
 
 // ---------------- data
@@ -68,18 +71,40 @@ function layout(vis){
   const walk=k=>{ if(seenW.has(k)) return; seenW.add(k); order.push(k); (children.get(k)||[]).forEach(walk); };
   roots.forEach(walk);
   for(const k of order){ if(!vis.has(k) || roots.includes(k)) continue; const p=vpar(k); if(p && vkids.has(p)) vkids.get(p).push(k); }
-  const dOf=k=>{ let d=0,p=k; while(p && !roots.includes(p)){ d++; p=vpar(p);} return d; };
   POS=new Map();
-  const place=sd=>{ let slot=0; const ys=new Map();
-    const rec=k=>{ const ch=vkids.get(k); if(!ch.length){ const y=slot*ROWH; slot++; ys.set(k,y); return y; }
-      const cy=ch.map(rec); const y=(cy[0]+cy[cy.length-1])/2; ys.set(k,y); return y; };
-    const tops=roots.flatMap(r=>vkids.get(r).filter(c=>side.get(c)===sd)); tops.forEach(rec); return {ys,tops}; };
-  const R=place(1), Lf=place(-1);
-  const mid=res=>res.tops.length ? (res.ys.get(res.tops[0])+res.ys.get(res.tops[res.tops.length-1]))/2 : 0;
-  const rootY = R.tops.length ? mid(R) : mid(Lf); const lShift = rootY - mid(Lf);
-  R.ys.forEach((y,k)=>{ const d=dOf(k); POS.set(k,{x:d*COLW,y,c:d}); });
-  Lf.ys.forEach((y,k)=>{ const d=dOf(k); POS.set(k,{x:-d*COLW,y:y+lShift,c:-d}); });
-  roots.forEach((r,i)=>POS.set(r,{x:0,y:rootY+i*ROWH,c:0}));
+  // Each node with its visible subtree is a block (w x h). A node sits at its block's top-left, its
+  // children's blocks one column to the right. Tree layout stacks sibling blocks in one column.
+  // Compact layout wraps them into several columns side by side once a column would grow taller
+  // than H. One H serves the whole map; it is searched so the map comes out about window-shaped.
+  const M=new Map(); let H=Infinity;
+  const meas=k=>{ const ch=vkids.get(k);
+    const m = ch.length ? (a=>({w:COLW+a.w, h:Math.max(ROWH,a.h), y:a.mid, kids:a.kids}))(pack(ch)) : {w:NW, h:ROWH, y:0, kids:[]};
+    M.set(k,m); return m; };
+  const pack=ch=>{ const bs=ch.map(c=>({k:c, m:meas(c)}));
+    const kids=[]; let x=0, y=0, cw=0, col=0, ah=0;
+    for(const b of bs){
+      if(y>0 && y+b.m.h>H){ x+=cw+WRAP_GAP; y=0; cw=0; col++; }
+      kids.push({k:b.k, dx:x, dy:y, col}); y+=b.m.h; cw=Math.max(cw,b.m.w); ah=Math.max(ah,y); }
+    const cys=kids.map(q=>q.dy+M.get(q.k).y);
+    return {w:x+cw, h:ah, mid:(Math.min(...cys)+Math.max(...cys))/2, kids}; };
+  // sd=-1 mirrors the right-hand layout for the callers on the left
+  const put=(k,X,Y,sd,g)=>{ const m=M.get(k); POS.set(k,{x:sd*X, y:Y+m.y, g});
+    for(const q of m.kids) put(q.k, X+COLW+q.dx, Y+q.dy, sd, q.col); };
+  const sideArea=sd=>{ const tops=roots.flatMap(r=>vkids.get(r).filter(c=>side.get(c)===sd)); return tops.length ? pack(tops) : null; };
+  const build=h=>{ H=h; M.clear(); const R=sideArea(1), Lf=sideArea(-1);
+    return {R, Lf, w:(R?COLW+R.w:NW)+(Lf?COLW+Lf.w:0), h:Math.max(R?R.h:0, Lf?Lf.h:0, roots.length*ROWH)}; };
+  let B=build(Infinity);
+  if(st.layout==='compact'){
+    const r=svg.getBoundingClientRect(), want=(r.width>200 && r.height>200) ? r.width/r.height : ASPECT;
+    if(B.w/B.h < want){   // taller than the window: find the tallest column height that is wide enough
+      let lo=WRAP_MIN_H, hi=B.h;
+      for(let i=0;i<18 && hi-lo>ROWH/2;i++){ const mid=(lo+hi)/2, b=build(mid); if(b.w/b.h > want) lo=mid; else hi=mid; }
+      B=build(hi); } }
+  const {R, Lf}=B;
+  const rootY = R ? R.mid : (Lf ? Lf.mid : 0);
+  if(R) R.kids.forEach(q=>put(q.k, COLW+q.dx, q.dy, 1, q.col));
+  if(Lf){ const sh=rootY-Lf.mid; Lf.kids.forEach(q=>put(q.k, COLW+q.dx, q.dy+sh, -1, q.col)); }
+  roots.forEach((r,i)=>POS.set(r,{x:0,y:rootY+i*ROWH,g:0}));
   let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   POS.forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
   if(!POS.size){ x0=y0=0; x1=y1=1; }
@@ -97,7 +122,8 @@ function draw(){
     else if(b.x<a.x){ x1=a.x; x2=b.x+NW; const m=Math.max(40,(x1-x2)*0.5); d=`M${x1},${y1} C${x1-m},${y1} ${x2+m},${y2} ${x2},${y2}`; }
     else { x1=a.x+NW; x2=b.x+NW; const bulge=40+Math.min(300,Math.abs(y2-y1)*0.12); d=`M${x1},${y1} C${x1+bulge},${y1} ${x2+bulge},${y2} ${x2},${y2}`; }
     const isTree = parent.get(e.t)===e.s || parent.get(e.s)===e.t;
-    const g=el('g',{class:['edge', e.soft?'soft':e.k, e.flags.includes('disabled')?'disabled':'', isTree?'':'xt'].join(' '),'data-i':e.i},gE);
+    const inGrid = isTree && (a.g||b.g);   // runs under the grid's first columns: label only when selected
+    const g=el('g',{class:['edge', e.soft?'soft':e.k, e.flags.includes('disabled')?'disabled':'', isTree?'':'xt', inGrid?'gl':''].join(' '),'data-i':e.i},gE);
     const mk = e.soft?'arSoft':(e.k==='call'?'arCall':(e.k==='struct'?'arStruct':'arCond'));
     el('path',{d,'marker-end':`url(#${mk})`},g);
     el('title',{},g).textContent=`${byKey.get(e.s).name} → ${byKey.get(e.t).name}\n${e.ctx}${e.n>1?' ×'+e.n:''}\n${e.sites.map(s=>s.at).join('\n')}`;
@@ -224,7 +250,8 @@ function buildLegend(){
   $('lgHead').onclick=()=>{ const b=$('lgBody'); const fold=b.style.display!=='none'; b.style.display=fold?'none':''; legend.dataset.folded=fold?'1':''; };
 }
 function syncOpts(){ const m={optLabels:'labels',optSoft:'soft',optBoundary:'boundary',optDisabled:'disabled'};
-  for(const id in m){ const e=$(id); if(e) e.checked=st[m[id]]; } }
+  for(const id in m){ const e=$(id); if(e) e.checked=st[m[id]]; }
+  const bl=$('btnLayout'); if(bl){ bl.textContent=t(st.layout==='compact'?'ui.layout_compact':'ui.layout_tree'); bl.title=t('ui.layout_tip'); } }
 function placeChrome(){ const top=$('top'); const h=top?top.offsetHeight:0;
   ['stage','side'].forEach(id=>{ const e=$(id); if(e) e.style.top=h+'px'; }); const r=$('results'); if(r) r.style.top=(h+2)+'px'; }
 function foldTo(level){ st.collapsed.clear(); depth.forEach((d,k)=>{ if(d===level && (children.get(k)||[]).length) st.collapsed.add(k); }); }
@@ -246,6 +273,10 @@ function init(o){
   bind('btnFit',()=>fit());
   bind('btnExpand',()=>{ st.collapsed.clear(); draw(); });
   bind('btnFold',()=>{ foldTo(3); draw(); fit(); });
+  bind('btnLayout',()=>{ st.layout = st.layout==='compact'?'tree':'compact';
+    try { localStorage.setItem('v3tree.layout', st.layout); } catch(e){}
+    syncOpts(); draw(); if(st.sel && POS.has(st.sel)) center(st.sel); else fit(); });
+  syncOpts();
   bind('btnTheme',()=>{ const r=document.documentElement; r.setAttribute('data-theme', isDark()?'light':'dark'); buildLegend(); draw(); });
   const res=$('results');
   if(q && res){
