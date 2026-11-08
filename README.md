@@ -9,7 +9,7 @@ It is for modders who have lost track of a large system: chains rewritten many t
 ![A map in the browser: the selected node's incoming links, each with file:line, on the right](docs/images/map.webp)
 
 - **Mechanical, traceable index.** Parses the game and any number of mods in load order. Calls, condition reads, buttons, progress bars, variables, modifiers, laws, pops… each edge carries file:line. What it cannot resolve is listed, never guessed.
-- **You decide the boundary.** A map needs to know what belongs to your theme. Do it by hand in a local web page (search N steps, accept / draw-only / remove, search further, sign off), or let an AI agent judge every neighbour with a written reason.
+- **You decide the boundary.** A map needs to know what belongs to your theme. Do it by hand in a local web page (search N steps, accept / draw-only / remove, search further, complete), or let an AI agent judge every neighbour with a written reason.
 - **Checks itself.** Every report re-checks 10 random edges against the source, searches the raw text for references the index missed, and lists suspected problems (variables written but never read, events nothing fires, effects only shown in tooltips…).
 - **Offline, no dependencies.** Python 3.10+ standard library only. The map is one HTML file.
 
@@ -34,7 +34,7 @@ Run commands from the repository folder as `python run.py <command>`. Optional: 
    ![New search: autocomplete for the root, stop rules below](docs/images/new-search.png)
 4. Click nodes to see their code, file:line and every connection. **Accept**, **Draw, don't expand** or **Remove**; Ctrl-click to select several. **Search further** grows the tree from accepted and undecided nodes. **Undo** steps back.
    **Focus on this node** (in the node panel) hides the rest of the map and shows only that node and its direct neighbours. Click a neighbour to follow the chain one step; the bar at the top shows the path, click any step to go back, Esc steps back.
-5. **Sign off:** the map, a report and a JSON file are saved in `output/cases/<name>/`. `map.html` opens by double-click, offline.
+5. **Complete:** the map, a report and a JSON file are saved in `output/cases/<name>/`. `map.html` opens by double-click, offline.
 
 Everything is saved in the `output` folder inside the tool unless you set **Output folder** in Settings; tick "move the existing index and sessions too" to take your sessions along when you change it.
 

@@ -37,7 +37,7 @@ Anything that cannot be resolved without running the game (scope targets, values
 
 **Judged (AI or person, command line).** `expand` lists every neighbour of every in-theme node that has no verdict yet. You judge them in `decisions.txt` until nothing is pending. Precise, explainable, slower.
 
-**Step search (web interface or `v3tree search`).** From the root, take N steps along references. Stop rules keep it from swallowing the whole game: nodes referenced more than N times (default 40), countries, characters, cultures, laws, ideologies, engine on_actions, and (when a mod is loaded) vanilla-only definitions are drawn but not expanded. You accept, draw-only, or remove nodes and search further; signing off turns undecided nodes into in-theme and stop-rule nodes into boundary. Fast; the boundary is only as good as your pruning.
+**Step search (web interface or `v3tree search`).** From the root, take N steps along references. Stop rules keep it from swallowing the whole game: nodes referenced more than N times (default 40), countries, characters, cultures, laws, ideologies, engine on_actions, and (when a mod is loaded) vanilla-only definitions are drawn but not expanded. You accept, draw-only, or remove nodes and search further; **Complete** turns undecided nodes into in-theme and stop-rule nodes into boundary. Fast; the boundary is only as good as your pruning.
 
 Both write the same decisions file, so you can switch between them.
 

@@ -8,7 +8,7 @@
   v3tree new NAME SPEC "THEME"        new case for judging (AI or by hand), with a decisions file
   v3tree expand NAME                  list what still needs a judgment
   v3tree render NAME                  map.html + report.md + subgraph.json
-  v3tree search SPEC --steps N        automatic: step search with stop rules, sign off, render
+  v3tree search SPEC --steps N        automatic: step search with stop rules, complete, render
   v3tree serve                        local web interface
   v3tree cases                        list cases / sessions
 

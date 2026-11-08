@@ -94,9 +94,9 @@ UI = {
     'ui.steps': ('步数', 'Steps'),
     'ui.continue': ('继续搜索', 'Search further'),
     'ui.undo': ('撤销', 'Undo'),
-    'ui.signoff': ('验收完成', 'Sign off'),
+    'ui.signoff': ('验收完成', 'Complete'),
     'ui.signoff_confirm': ('验收：待定的节点算同主题，停止规则节点算边界，然后保存并生成图和报告。继续吗？',
-                           'Sign off: undecided nodes become in theme, stop-rule nodes become boundary; '
+                           'Complete: undecided nodes become in theme, stop-rule nodes become boundary; '
                            'then the map and report are saved. Continue?'),
     'ui.settings': ('设置', 'Settings'),
     'ui.sessions': ('会话', 'Sessions'),

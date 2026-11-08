@@ -20,8 +20,8 @@ UI_REASON = {
     'in': ('界面：接受', 'UI: accepted'),
     'boundary': ('界面：只画不展开', 'UI: draw, do not expand'),
     'out': ('界面：去掉', 'UI: removed'),
-    'final_in': ('界面：验收时接受', 'UI: accepted at sign-off'),
-    'final_stop': ('界面：停止规则节点，验收时画为边界', 'UI: stop-rule node, drawn as boundary at sign-off'),
+    'final_in': ('界面：验收时接受', 'UI: accepted on Complete'),
+    'final_stop': ('界面：停止规则节点，验收时画为边界', 'UI: stop-rule node, drawn as boundary on Complete'),
 }
 
 
@@ -200,7 +200,7 @@ def view_nodes(case, g):
 
 
 def finalize(case, g, lang='zh'):
-    """Sign-off: undecided nodes become in-theme; stop-rule nodes become boundary."""
+    """Complete: undecided nodes become in-theme; stop-rule nodes become boundary."""
     case['_roots'] = set(case['roots'])
     for k, info in view_nodes(case, g).items():
         if info['v'] != 'unjudged':

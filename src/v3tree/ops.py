@@ -165,7 +165,7 @@ def session_payload(cfg, name, g):
 
 
 def auto_search(cfg, root_spec, steps=3, name=None, theme='', stop=None, accept=True):
-    """Command-line automatic mode: search N steps with the stop rules, optionally sign off, render."""
+    """Command-line automatic mode: search N steps with the stop rules, optionally complete, render."""
     i18n.set_lang(cfg.get('ui_language', 'en'))
     od = out_dir(cfg)
     g = J.load_index(od)
