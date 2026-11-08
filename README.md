@@ -33,7 +33,10 @@ Run commands from the repository folder as `python run.py <command>`. Optional: 
 
    ![New search: autocomplete for the root, stop rules below](docs/images/new-search.png)
 4. Click nodes to see their code, file:line and every connection. **Accept**, **Draw, don't expand** or **Remove**; Ctrl-click to select several. **Search further** grows the tree from accepted and undecided nodes. **Undo** steps back.
+
    **Focus on this node** (in the node panel) hides the rest of the map and shows only that node and its direct neighbours. Click a neighbour to follow the chain one step; the bar at the top shows the path, click any step to go back, Esc steps back.
+
+   ![Focus chain: the path walked so far in the bar at the top, the last node's neighbours on the right](docs/images/focus-chain-en.webp)
 5. **Complete:** the map, a report and a JSON file are saved in `output/cases/<name>/`. `map.html` opens by double-click, offline.
 
 Everything is saved in the `output` folder inside the tool unless you set **Output folder** in Settings; tick "move the existing index and sessions too" to take your sessions along when you change it.
