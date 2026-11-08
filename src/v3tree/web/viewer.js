@@ -167,35 +167,80 @@ function layout(vis){
 }
 
 // ---------------- draw
+// draw() lays out the whole map and works out every edge's shape; render() then puts on the page only
+// what lies near the view. A big map has tens of thousands of SVG elements, and the browser repaints
+// all of them on every zoom step; with only the nearby part on the page, zooming and panning stay smooth.
+let EG = [], RR = null, rendLod = -1, rendK = 1, lastRender = 0, renderTimer = 0, rafPending = false;
+const LOD = () => st.k < 0.2 ? 0 : (st.k < 0.45 ? 1 : 2);   // 0: boxes only · 1: + names · 2: full detail
+function edgeGeom(e){
+  const a=POS.get(e.s), b=POS.get(e.t); if(!a||!b) return null;
+  let x1,y1=a.y+NH/2,x2,y2=b.y+NH/2,d,reach=0;
+  if(b.x>a.x){ x1=a.x+NW; x2=b.x; const m=Math.max(40,(x2-x1)*0.5); d=`M${x1},${y1} C${x1+m},${y1} ${x2-m},${y2} ${x2},${y2}`; }
+  else if(b.x<a.x){ x1=a.x; x2=b.x+NW; const m=Math.max(40,(x1-x2)*0.5); d=`M${x1},${y1} C${x1-m},${y1} ${x2+m},${y2} ${x2},${y2}`; }
+  else { x1=a.x+NW; x2=b.x+NW; reach=40+Math.min(300,Math.abs(y2-y1)*0.12); d=`M${x1},${y1} C${x1+reach},${y1} ${x2+reach},${y2} ${x2},${y2}`; }
+  const isTree = st.focus ? focusMain(e) : (parent.get(e.t)===e.s || parent.get(e.s)===e.t);
+  const inGrid = isTree && (a.g||b.g);   // runs under the grid's first columns: label only when selected
+  const lx = b.x===a.x ? Math.max(x1,x2)+30 : (x1+x2)/2;
+  return {e, d, lx, ly:(y1+y2)/2-3, x1, y1, x2, y2, reach, xt:!isTree,
+    cls:['edge', e.soft?'soft':e.k, e.flags.includes('disabled')?'disabled':'', isTree?'':'xt', inGrid?'gl':''].join(' '),
+    mk: e.soft?'arSoft':(e.k==='call'?'arCall':(e.k==='struct'?'arStruct':'arCond')),
+    minx:Math.min(x1,x2), maxx:Math.max(x1,x2)+reach+(reach?60:0), miny:Math.min(y1,y2)-12, maxy:Math.max(y1,y2)+4}; }
+// does an edge pass through rectangle R? The curve stays close to the line between its ends
+// (it bends by at most about a third of the smaller side), so test that line, widened by that much.
+function edgeNear(q,R){
+  if(q.maxx<R.x0 || q.minx>R.x1 || q.maxy<R.y0 || q.miny>R.y1) return false;
+  if(q.reach) return true;
+  const pad=60+0.35*Math.min(Math.abs(q.x2-q.x1),Math.abs(q.y2-q.y1));
+  const x0=R.x0-pad, x1=R.x1+pad, y0=R.y0-pad, y1=R.y1+pad, dx=q.x2-q.x1, dy=q.y2-q.y1;
+  let t0=0, t1=1;   // Liang–Barsky clip of the segment against the widened rectangle
+  for(const [pp,qq] of [[-dx,q.x1-x0],[dx,x1-q.x1],[-dy,q.y1-y0],[dy,y1-q.y1]]){
+    if(pp===0){ if(qq<0) return false; continue; }
+    const r=qq/pp; if(pp<0){ if(r>t1) return false; if(r>t0) t0=r; } else { if(r<t0) return false; if(r<t1) t1=r; } }
+  return true; }
 function draw(){
   curVis=visibleNodes(); curEdges=visibleEdges(curVis); box=layout(curVis);
+  EG=[]; for(const e of curEdges){ const q=edgeGeom(e); if(q) EG.push(q); }
+  const cnt=$('cnt'); if(cnt) cnt.textContent = t('ui.count',{a:curVis.size,b:D.nodes.length,e:curEdges.length});
+  render(); applyTransform(true);
+}
+// the part of the map (in map coordinates) the window shows, widened by `margin` window-sizes on each side
+function viewRect(margin){ const r=svg.getBoundingClientRect(), w=Math.max(r.width,200)/st.k, h=Math.max(r.height,200)/st.k;
+  const x0=-st.tx/st.k, y0=-st.ty/st.k; return {x0:x0-w*margin, y0:y0-h*margin, x1:x0+w*(1+margin), y1:y0+h*(1+margin)}; }
+function render(){
+  const R=RR=viewRect(0.6), lod=rendLod=LOD(); rendK=st.k; lastRender=performance.now();
   gE.textContent=''; gN.textContent='';
-  for(const e of curEdges){
-    const a=POS.get(e.s), b=POS.get(e.t); if(!a||!b) continue;
-    let x1,y1=a.y+NH/2,x2,y2=b.y+NH/2,d;
-    if(b.x>a.x){ x1=a.x+NW; x2=b.x; const m=Math.max(40,(x2-x1)*0.5); d=`M${x1},${y1} C${x1+m},${y1} ${x2-m},${y2} ${x2},${y2}`; }
-    else if(b.x<a.x){ x1=a.x; x2=b.x+NW; const m=Math.max(40,(x1-x2)*0.5); d=`M${x1},${y1} C${x1-m},${y1} ${x2+m},${y2} ${x2},${y2}`; }
-    else { x1=a.x+NW; x2=b.x+NW; const bulge=40+Math.min(300,Math.abs(y2-y1)*0.12); d=`M${x1},${y1} C${x1+bulge},${y1} ${x2+bulge},${y2} ${x2},${y2}`; }
-    const isTree = st.focus ? focusMain(e) : (parent.get(e.t)===e.s || parent.get(e.s)===e.t);
-    const inGrid = isTree && (a.g||b.g);   // runs under the grid's first columns: label only when selected
-    const g=el('g',{class:['edge', e.soft?'soft':e.k, e.flags.includes('disabled')?'disabled':'', isTree?'':'xt', inGrid?'gl':''].join(' '),'data-i':e.i},gE);
-    const mk = e.soft?'arSoft':(e.k==='call'?'arCall':(e.k==='struct'?'arStruct':'arCond'));
-    el('path',{d,'marker-end':`url(#${mk})`},g);
+  const fe=document.createDocumentFragment(), fn=document.createDocumentFragment();
+  for(const q of EG){ if(!edgeNear(q,R)) continue;
+    if(lod<1 && q.xt) continue;   // far out, the faint cross edges are only noise and cost the most
+    const e=q.e, g=el('g',{class:q.cls,'data-i':e.i},fe);
+    const inR=(x,y)=>x>=R.x0 && x<=R.x1 && y>=R.y0 && y<=R.y1;   // arrowheads and labels only where they can be seen
+    el('path', inR(q.x2,q.y2) && (lod>=2 || (lod===1 && !q.xt)) ? {d:q.d,'marker-end':`url(#${q.mk})`} : {d:q.d}, g);
+    if(lod<2) continue;
     el('title',{},g).textContent=`${byKey.get(e.s).name} → ${byKey.get(e.t).name}\n${e.ctx}${e.n>1?' ×'+e.n:''}\n${e.sites.map(s=>s.at).join('\n')}`;
-    if(st.labels){ const lx = b.x===a.x ? Math.max(x1,x2)+30 : (x1+x2)/2;
-      el('text',{x:lx,y:(y1+y2)/2-3,'text-anchor':'middle'},g).textContent =
-        cut((e.soft?'⇢ ':'') + e.ctx + (e.n>1?' ×'+e.n:'') + (e.flags.includes('tooltip_only')?t('ui.tooltip_only'):''), 22); }
-  }
+    if(st.labels && inR(q.lx,q.ly)) el('text',{x:q.lx,y:q.ly,'text-anchor':'middle'},g).textContent =
+      cut((e.soft?'⇢ ':'') + e.ctx + (e.n>1?' ×'+e.n:'') + (e.flags.includes('tooltip_only')?t('ui.tooltip_only'):''), 22); }
   for(const k of curVis){
     const n=byKey.get(k), p=POS.get(k); if(!p) continue;
+    if(p.x+NW<R.x0 || p.x>R.x1 || p.y+NH+20<R.y0 || p.y-20>R.y1) continue;
     const col=COLORS[n.t]||'#777';
     const cls='node'+(n.v==='boundary'?' boundary':'')+(n.dis?' disabled':'')+(n.v==='unjudged'?' pending':'')+(n.fresh?' fresh':'')+(st.multi.has(k)?' multi':'')+
       (st.focus && st.focus.includes(k)?' chain':'');
-    const g=el('g',{class:cls,transform:`translate(${p.x},${p.y})`,'data-k':k},gN);
+    const g=el('g',{class:cls,transform:`translate(${p.x},${p.y})`,'data-k':k},fn);
     el('rect',{class:'box',width:NW,height:NH,rx:7,fill:tint(col, n.v==='boundary'?0.08:(n.v==='unjudged'?0.1:0.18)),stroke:col},g);
     el('rect',{x:0,y:0,width:6,height:NH,rx:3,fill:col},g);
+    g.addEventListener('click',ev=>{ ev.stopPropagation();
+      if(opts.editable && (ev.ctrlKey||ev.metaKey)){ if(st.multi.has(k)) st.multi.delete(k); else st.multi.add(k); draw(); showMulti(); return; }
+      if(st.focus){ focusTo(k); return; }
+      st.multi.clear(); select(k); });
+    if(lod<1) continue;
     const nm=el('text',{class:'nm',x:12,y:18},g);
     nm.textContent = n.noloc ? cut(n.id,24) : cut(n.name,15);
+    const ch=children.get(k);
+    if(ch && ch.length && !st.focus){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
+      el('circle',{r:8,fill:tint(col,0.5),stroke:col},tg);
+      el('text',{x:0,y:4,'text-anchor':'middle',style:'font-size:12px;fill:var(--ink);pointer-events:none'},tg).textContent = st.collapsed.has(k)?'+':'−';
+      tg.addEventListener('click',ev=>{ ev.stopPropagation(); if(st.collapsed.has(k)) st.collapsed.delete(k); else st.collapsed.add(k); draw(); }); }
+    if(lod<2) continue;
     if(n.noloc) el('tspan',{class:'badge',dx:4},nm).textContent=t('ui.noloc');
     el('text',{class:'id',x:12,y:35},g).textContent = cut((n.noloc? n.tz : n.id),34);
     const top=[];
@@ -204,28 +249,26 @@ function draw(){
     if(n.fresh) top.push(t('ui.fresh_badge'));
     if(top.length) el('text',{class:'badge',x:NW-4,y:-4,'text-anchor':'end'},g).textContent=top.join(' · ');
     if(n.dis) el('text',{class:'badge',x:4,y:-4},g).textContent=t('ui.disabled_badge');
-    const ch=children.get(k);
-    if(ch && ch.length && !st.focus){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
-      el('circle',{r:8,fill:tint(col,0.5),stroke:col},tg);
-      el('text',{x:0,y:4,'text-anchor':'middle',style:'font-size:12px;fill:var(--ink);pointer-events:none'},tg).textContent = st.collapsed.has(k)?'+':'−';
-      tg.addEventListener('click',ev=>{ ev.stopPropagation(); if(st.collapsed.has(k)) st.collapsed.delete(k); else st.collapsed.add(k); draw(); }); }
     el('title',{},g).textContent=`${n.name}\n${n.id}\n${n.tz}${n.v==='boundary'?'\n'+t('ui.boundary_badge')+n.sys:''}`;
-    g.addEventListener('click',ev=>{ ev.stopPropagation();
-      if(opts.editable && (ev.ctrlKey||ev.metaKey)){ if(st.multi.has(k)) st.multi.delete(k); else st.multi.add(k); draw(); showMulti(); return; }
-      if(st.focus){ focusTo(k); return; }
-      st.multi.clear(); select(k); });
   }
-  for(const f of FL) el('text',{class:'flabel',x:f.x,y:f.y+14},gN).textContent=f.text;
-  const cnt=$('cnt'); if(cnt) cnt.textContent = t('ui.count',{a:curVis.size,b:D.nodes.length,e:curEdges.length});
-  applySel(); applyTransform();
+  for(const f of FL) el('text',{class:'flabel',x:f.x,y:f.y+14},fn).textContent=f.text;
+  gE.appendChild(fe); gN.appendChild(fn);
+  applySel();
 }
-function applyTransform(){ vp.setAttribute('transform',`translate(${st.tx},${st.ty}) scale(${st.k})`); svg.classList.toggle('far', st.k<0.45); }
+// render again when the view leaves the part on the page, the detail level changes, or we zoomed far in
+function needRender(){ if(!RR || LOD()!==rendLod || st.k>rendK*2.5) return true;
+  const v=viewRect(0); return v.x0<RR.x0 || v.y0<RR.y0 || v.x1>RR.x1 || v.y1>RR.y1; }
+function checkRender(now){ clearTimeout(renderTimer); if(!EG.length && !curVis.size) return; if(!needRender()) return;
+  if(now || performance.now()-lastRender>150) render(); else renderTimer=setTimeout(()=>{ if(needRender()) render(); }, 150); }
+// now=true renders at once (fit, centre, jump to a node); wheel and drag go through scheduleTransform
+function applyTransform(now){ vp.setAttribute('transform',`translate(${st.tx},${st.ty}) scale(${st.k})`); svg.classList.toggle('far', st.k<0.45); checkRender(now); }
+function scheduleTransform(){ if(rafPending) return; rafPending=true; requestAnimationFrame(()=>{ rafPending=false; applyTransform(false); }); }
 function sideW(){ return $('side').style.display==='block'?470:0; }
 function fit(){ fitTo(box, 1.2); }
 function fitTo(b, maxK){ const r=svg.getBoundingClientRect();
   const fb=$('focusBar'), top=(fb && fb.style.display==='block') ? fb.offsetHeight+12 : 0;   // keep clear of the focus bar
   const k=Math.min((r.width-sideW()-40)/Math.max(b.w,1),(r.height-40-top)/Math.max(b.h,1),maxK); st.k=Math.max(k,0.03);
-  st.tx=20-b.x0*st.k; st.ty=20+top-b.y0*st.k; applyTransform(); }
+  st.tx=20-b.x0*st.k; st.ty=20+top-b.y0*st.k; applyTransform(true); }
 // in focus mode, frame the newest step (its node and its neighbours), not the whole walked chain
 function fitFocus(){ if(!st.focus) return; const L=focusLast(); let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   POS.forEach((p,k)=>{ if(st.focus.includes(k) && k!==L) return;
@@ -234,13 +277,14 @@ function fitFocus(){ if(!st.focus) return; const L=focusLast(); let x0=Infinity,
   if(st.focus.length>1){ x0-=COLW*0.6; }   // a glimpse of the previous step
   fitTo({x0,y0,w:x1-x0,h:y1-y0}, 1); }
 function center(k){ const p=POS.get(k); if(!p) return; const r=svg.getBoundingClientRect();
-  st.k=Math.max(st.k,0.8); st.tx=(r.width-sideW())/2-(p.x+NW/2)*st.k; st.ty=r.height/2-(p.y+NH/2)*st.k; applyTransform(); }
+  st.k=Math.max(st.k,0.8); st.tx=(r.width-sideW())/2-(p.x+NW/2)*st.k; st.ty=r.height/2-(p.y+NH/2)*st.k; applyTransform(true); }
 
 // ---------------- selection and side panel
 function applySel(){
   const k=st.sel; const hot=new Set();
+  if(k) for(const e of curEdges) if(e.s===k||e.t===k){ hot.add(e.s); hot.add(e.t); }
   gE.querySelectorAll('.edge').forEach(g=>{ const e=D.edges[+g.dataset.i]; const on=k && (e.s===k||e.t===k);
-    g.classList.toggle('hot',!!on); g.classList.toggle('dim',!!k && !on); if(on){hot.add(e.s);hot.add(e.t);} });
+    g.classList.toggle('hot',!!on); g.classList.toggle('dim',!!k && !on); });
   gN.querySelectorAll('.node').forEach(g=>{ const kk=g.dataset.k; g.classList.toggle('sel',kk===k); g.classList.toggle('dim',!!k && !hot.has(kk) && kk!==k); });
 }
 function vname(v){ return L['v.'+v] || v; }
@@ -372,15 +416,15 @@ function init(o){
   let drag=null;
   svg.addEventListener('mousedown',ev=>{ drag={x:ev.clientX,y:ev.clientY,tx:st.tx,ty:st.ty,moved:false}; svg.classList.add('drag'); });
   window.addEventListener('mousemove',ev=>{ if(!drag) return; const dx=ev.clientX-drag.x, dy=ev.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true;
-    st.tx=drag.tx+dx; st.ty=drag.ty+dy; applyTransform(); });
+    st.tx=drag.tx+dx; st.ty=drag.ty+dy; scheduleTransform(); });
   window.addEventListener('mouseup',()=>{ svg.classList.remove('drag'); setTimeout(()=>{drag=null;},0); });
   svg.addEventListener('click',()=>{ if(drag && drag.moved) return; if(st.sel || st.multi.size){ st.sel=null; st.multi.clear(); applySel(); $('side').style.display='none'; draw(); } if(res) res.style.display='none'; });
   svg.addEventListener('wheel',ev=>{ ev.preventDefault(); const r=svg.getBoundingClientRect(); const mx=ev.clientX-r.left, my=ev.clientY-r.top;
-    const f=Math.exp(-ev.deltaY*0.0015); const k=Math.min(4,Math.max(0.03,st.k*f)); st.tx=mx-(mx-st.tx)*k/st.k; st.ty=my-(my-st.ty)*k/st.k; st.k=k; applyTransform(); },{passive:false});
+    const f=Math.exp(-ev.deltaY*0.0015); const k=Math.min(4,Math.max(0.03,st.k*f)); st.tx=mx-(mx-st.tx)*k/st.k; st.ty=my-(my-st.ty)*k/st.k; st.k=k; scheduleTransform(); },{passive:false});
   let touch=null;
   svg.addEventListener('touchstart',ev=>{ if(ev.touches.length===1) touch={x:ev.touches[0].clientX,y:ev.touches[0].clientY,tx:st.tx,ty:st.ty}; },{passive:true});
-  svg.addEventListener('touchmove',ev=>{ if(touch&&ev.touches.length===1){ st.tx=touch.tx+ev.touches[0].clientX-touch.x; st.ty=touch.ty+ev.touches[0].clientY-touch.y; applyTransform(); } },{passive:true});
-  window.addEventListener('resize',placeChrome); placeChrome();
+  svg.addEventListener('touchmove',ev=>{ if(touch&&ev.touches.length===1){ st.tx=touch.tx+ev.touches[0].clientX-touch.x; st.ty=touch.ty+ev.touches[0].clientY-touch.y; scheduleTransform(); } },{passive:true});
+  window.addEventListener('resize',()=>{ placeChrome(); checkRender(true); }); placeChrome();
 }
 function load(data, keepView){
   D=data; buildTree();
