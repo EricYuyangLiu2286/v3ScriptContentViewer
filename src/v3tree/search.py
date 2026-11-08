@@ -131,6 +131,8 @@ def judge_node(case, g, key, verdict, lang='zh', system=''):
     """Record a UI judgment and update the found set (removing pulls away what only hung on it)."""
     case['_roots'] = set(case['roots'])
     s = state(case)
+    if key in case['_roots']:
+        return s   # a root is always in theme; a verdict for it would be written but never used
     _snapshot(case, s)
     sysname = (system or ('界面' if lang == 'zh' else 'UI')).replace(' ', '_')
     line = f"{verdict} {key}" + (f" @{sysname}" if verdict == 'boundary' else '') + f" # {_r(verdict, lang)}"

@@ -64,6 +64,9 @@ UI = {
     'ui.act_in': ('接受', 'Accept'),
     'ui.act_boundary': ('只画不展开', "Draw, don't expand"),
     'ui.act_out': ('去掉', 'Remove'),
+    'ui.root_fixed': ('根节点是这张图的起点，不能去掉或设为边界。要换根节点，请新建一次搜索。',
+                      'The root is where this map starts; it cannot be removed or made a boundary. '
+                      'To change the root, start a new search.'),
     'ui.act_hint': ('接受：算同主题，下次从它继续找。只画不展开：算边界。去掉：算无关，只经由它找到的节点一并去掉。',
                     "Accept: in theme; the next search grows from it. Draw, don't expand: boundary. "
                     'Remove: unrelated; nodes found only through it go too.'),

@@ -155,13 +155,18 @@ function edgeRow(e,dir){ const o=dir==='out'?e.t:e.s; const on=byKey.get(o);
   const sites=e.sites.map(s=>`<div><code>${esc(s.at)}</code> <span class="muted">${esc(s.rel)}${s.acc?'·'+(s.acc==='write'?t('ui.write'):t('ui.read')):''}</span><br><code>${esc(s.code)}</code>${s.via?`<br><span class="muted">${esc(t('ui.via_param',{c:s.via.callee,s:s.via.call_site}))}</span>`:''}</div>`).join('');
   const kind = e.soft?t('ui.kind.soft'):t('ui.kind.'+e.k);
   return `<div class="el"><span class="pill">${esc(kind)}</span>${dir==='out'?'→':'←'} <a data-go="${esc(o)}">${esc(on?on.name:o)}</a> <span class="muted">${esc(on?on.tz:'')}</span><br><b>${esc(e.ctx)}</b>${e.n>1?' ×'+e.n:''}${e.flags.length?' <span class="muted">['+e.flags.join(',')+']</span>':''}${e.soft?'<br><span class="muted">'+t('ui.reason')+esc(e.why)+'</span>':''}${sites}</div>`; }
+// roots are where the map starts; they cannot be judged, only replaced by a new search
+const judgeable = keys => keys.filter(k=>!roots.includes(k));
 function actButtons(keys, cur){
   if(!opts.editable) return '';
+  const ks=judgeable(keys), note=ks.length<keys.length?`<div class="muted">${esc(t('ui.root_fixed'))}</div>`:'';
+  if(!ks.length) return note;
   const b=(v,lab)=>`<button data-act="${v}" class="${cur===v?'on':''}">${esc(t(lab))}</button>`;
-  return `<div class="acts">${b('in','ui.act_in')}${b('boundary','ui.act_boundary')}${b('out','ui.act_out')}</div><div class="muted">${esc(t('ui.act_hint'))}<br>${esc(t('ui.multi_hint'))}</div>`;
+  return `<div class="acts">${b('in','ui.act_in')}${b('boundary','ui.act_boundary')}${b('out','ui.act_out')}</div>${note}<div class="muted">${esc(t('ui.act_hint'))}<br>${esc(t('ui.multi_hint'))}</div>`;
 }
 function bindActs(panel, keys){
-  panel.querySelectorAll('[data-act]').forEach(btn=>btn.addEventListener('click',()=>{ if(opts.onJudge) opts.onJudge(keys, btn.dataset.act); }));
+  const ks=judgeable(keys);
+  panel.querySelectorAll('[data-act]').forEach(btn=>btn.addEventListener('click',()=>{ if(opts.onJudge && ks.length) opts.onJudge(ks, btn.dataset.act); }));
 }
 function showMulti(){
   const panel=$('side'); if(!st.multi.size){ panel.style.display='none'; return; }

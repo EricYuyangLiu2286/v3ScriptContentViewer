@@ -145,6 +145,11 @@ class TestCasesAndSearch(Base):
         S.search(case, self.g, 1)
         found1 = set(S.state(J.load_case(cp))['found'])
         self.assertIn('event:x.1', found1)
+        dp = cp.parent / 'decisions.txt'
+        before = dp.read_text('utf-8') if dp.exists() else ''
+        S.judge_node(J.load_case(cp), self.g, 'je:je_root', 'out', 'en')   # roots cannot be judged
+        self.assertEqual(before, dp.read_text('utf-8') if dp.exists() else '')
+        self.assertIn('je:je_root', S.view_nodes(J.load_case(cp), self.g))
         case = J.load_case(cp)
         S.judge_node(case, self.g, 'event:x.1', 'out', 'en')
         self.assertNotIn('event:x.1', S.view_nodes(J.load_case(cp), self.g))
