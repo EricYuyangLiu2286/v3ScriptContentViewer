@@ -110,7 +110,9 @@ function renderSettings(){
      ${ST.launcher_found?`<button id="sImport">${esc(t('ui.import_launcher'))}</button>`:''}</div>
    <label class="f">${esc(t('ui.languages'))}</label><input type="text" id="sLangs" value="${esc((c.languages||[]).join(', '))}">
    <label class="f">${esc(t('ui.ui_language'))}</label><select id="sUi"><option value="zh"${c.ui_language==='zh'?' selected':''}>中文</option><option value="en"${c.ui_language!=='zh'?' selected':''}>English</option></select>
-   <label class="f">${esc(t('ui.output_dir'))}</label><input type="text" id="sOut" value="${esc(c.output_dir||'')}">
+   <label class="f">${esc(t('ui.output_dir'))}</label><input type="text" id="sOut" value="${esc(c.output_dir||'')}" placeholder="${esc(ST.default_output||'')}">
+   <div class="muted">${esc(t('ui.out_hint'))}</div>
+   <label><input type="checkbox" id="sMove" checked> ${esc(t('ui.out_move'))}</label>
    <p><button class="primary" id="sSave">${esc(t('ui.save'))}</button> <span class="muted" id="sHint"></span></p>
    <div class="msgs" id="sMsgs"></div><p class="muted">${esc(ST.config_path)}</p></div>
    <div class="card"><h3>${esc(t('ui.build_index'))}</h3><p id="sIdx">${esc(idxLine)}</p>
@@ -124,7 +126,7 @@ function renderSettings(){
   $('sAddBtn').onclick=async()=>{ const p=$('sAdd').value.trim(); if(!p) return; const info=await guard(()=>api('/api/mod_info',{path:p}));
     c.mods=(c.mods||[]).concat([{path:p,name:info.name}]); c.load_order_source='manual'; $('sAdd').value=''; drawMods(); checkOne(); };
   if($('sImport')) $('sImport').onclick=async()=>{ const r=await guard(()=>api('/api/import_launcher',{mods:c.mods})); if(r.mods){ c.mods=r.mods; c.load_order_source='launcher'; drawMods(); checkOne(); } };
-  $('sSave').onclick=async()=>{ sync(); const r=await guard(()=>api('/api/config',{config:c}));
+  $('sSave').onclick=async()=>{ sync(); const r=await guard(()=>api('/api/config',{config:c, move_output:$('sMove').checked}));
     $('sMsgs').innerHTML=r.lines.map(([lv,tx])=>`<div class="${lv}">${esc(tx)}</div>`).join('');
     if(r.saved){ const langChanged=ST.config.ui_language!==c.ui_language; ST=r.state; draft=null; if(langChanged){ location.reload(); return; }
       $('sIdx').textContent = ST.index.exists ? t('ui.index_ready',{n:ST.index.nodes,e:ST.index.edges,v:ST.index.game_version||'?',t:ST.index.built})+(ST.index.stale?' — '+t('ui.index_stale'):'') : t('ui.index_none');

@@ -1,6 +1,6 @@
 """Operations shared by the command line and the web server."""
 from __future__ import annotations
-import json, time
+import json, os, shutil, stat, sys, time
 from pathlib import Path
 
 from . import config as C, index as I, judge as J, search as S, render as R, report as RP, i18n
@@ -9,6 +9,59 @@ from .sources import Sources, layers_from_config, LineCache
 
 def out_dir(cfg) -> Path:
     return Path(cfg.get('output_dir') or C.home() / 'output')
+
+
+def _clear_readonly(func, path, _exc):
+    # OneDrive and some sync tools mark folders read-only; Windows then refuses to remove them
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def remove_tree(path):
+    """shutil.rmtree that also removes read-only folders and files (otherwise an empty folder is left behind)."""
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_clear_readonly)
+    else:
+        shutil.rmtree(path, onerror=_clear_readonly)
+
+
+def _rmdir_if_empty(d: Path):
+    try:
+        if d.is_dir() and not any(d.iterdir()):
+            os.chmod(d, stat.S_IWRITE)
+            d.rmdir()
+    except OSError:
+        pass
+
+
+def move_output(old, new) -> list:
+    """Move the index and every session from one output folder to another. Nothing already in the new
+    folder is overwritten: an index or a session of the same name there is left and reported.
+    Returns [(level, message)] for the settings page."""
+    old, new = Path(old).resolve(), Path(new).resolve()
+    if old == new or not old.is_dir():
+        return []
+    new.mkdir(parents=True, exist_ok=True)
+    moved, skipped = 0, []
+    if (old / 'index').is_dir():
+        if (new / 'index').exists():
+            skipped.append('index')
+        else:
+            shutil.move(str(old / 'index'), str(new / 'index'))
+    if (old / 'cases').is_dir():
+        (new / 'cases').mkdir(exist_ok=True)
+        for d in sorted((old / 'cases').iterdir()):
+            if (new / 'cases' / d.name).exists():
+                skipped.append(d.name)
+            else:
+                shutil.move(str(d), str(new / 'cases' / d.name))
+                moved += 1
+    for d in (old / 'cases', old):   # tidy up only folders the move left empty
+        _rmdir_if_empty(d)
+    out = [('ok', i18n.T('ui.out_moved', n=moved, p=new))]
+    if skipped:
+        out.append(('note', i18n.T('ui.out_move_skip', x=', '.join(skipped), p=old)))
+    return out
 
 
 def config_fingerprint(cfg) -> str:

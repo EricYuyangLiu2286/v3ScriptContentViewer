@@ -124,9 +124,11 @@ def make_handler(app: App):
                     return self._json({'error': C.msg('need_path')}, 400)
                 code, lines = C.doctor(new)
                 if code < 2:
+                    i18n.set_lang(new.get('ui_language', 'en'))
+                    if b.get('move_output'):
+                        lines = lines + [list(x) for x in ops.move_output(ops.out_dir(cfg), ops.out_dir(new))]
                     app.cfg = new
                     C.save(new, app.cfg_path)
-                    i18n.set_lang(new.get('ui_language', 'en'))
                     app.g = None
                 return self._json({'code': code, 'lines': lines, 'saved': code < 2, 'state': self.state()})
             if path == '/api/doctor':
@@ -176,7 +178,7 @@ def make_handler(app: App):
             elif path == '/api/delete':
                 d = J.case_dir(ops.out_dir(cfg), name)
                 if d.exists() and d.resolve().is_relative_to(Path(ops.out_dir(cfg)).resolve()):
-                    shutil.rmtree(d)
+                    ops.remove_tree(d)
                 return self._json({'deleted': True, 'cases': ops.list_cases(cfg)})
             elif path == '/api/open_folder':
                 d = J.case_dir(ops.out_dir(cfg), name)
@@ -194,6 +196,7 @@ def make_handler(app: App):
             cfg = app.cfg
             return {'config': cfg, 'index': ops.index_status(cfg), 'cases': ops.list_cases(cfg),
                     'config_path': str(app.cfg_path), 'version': __version__,
+                    'default_output': str(C.home() / 'output'), 'output_now': str(ops.out_dir(cfg)),
                     'launcher_found': bool(C.launcher_mods(C.user_data_dir(cfg)))}
 
         def payload(self, name):

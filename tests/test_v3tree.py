@@ -167,6 +167,43 @@ class TestCasesAndSearch(Base):
         self.assertEqual(J.resolve_roots(self.g, 'USA'), [])       # only history writes c:USA, not a JE/event/decision
         self.assertEqual(J.resolve_roots(self.g, 'je_root'), ['je:je_root'])
 
+    def test_near_lists_both_directions_with_sites(self):
+        from v3tree.cli import near
+        (d,) = near(self.g, 'x.1')
+        self.assertEqual(d['key'], 'event:x.1')
+        self.assertIn('je:je_root', [o['key'] for o in d['in']])
+        self.assertTrue(all(':' in l['at'] for o in d['in'] + d['out'] for l in o['links']))
+        self.assertEqual(near(self.g, 'no_such_id'), [])
+
+
+class TestMoveOutput(unittest.TestCase):
+    def test_moves_index_and_sessions_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old, new = Path(tmp) / 'old', Path(tmp) / 'new'
+            for p in (old / 'index' / 'graph.json', old / 'cases' / 'a' / 'case.json',
+                      old / 'cases' / 'b' / 'case.json', new / 'cases' / 'b' / 'case.json'):
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(str(p.parent.name), 'utf-8')
+            lines = ops.move_output(old, new)
+            self.assertTrue((new / 'index' / 'graph.json').exists())
+            self.assertTrue((new / 'cases' / 'a' / 'case.json').exists())
+            self.assertEqual((new / 'cases' / 'b' / 'case.json').read_text('utf-8'), 'b')   # kept
+            self.assertTrue((old / 'cases' / 'b').exists())                                   # left behind
+            self.assertFalse((old / 'index').exists())
+            self.assertEqual([lv for lv, _ in lines], ['ok', 'note'])
+            self.assertEqual(ops.move_output(new, new), [])
+
+    def test_remove_tree_handles_read_only_folders(self):
+        import os, stat
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / 'case'
+            d.mkdir()
+            (d / 'case.json').write_text('{}', 'utf-8')
+            os.chmod(d / 'case.json', stat.S_IREAD)
+            os.chmod(d, stat.S_IREAD)       # read-only folder, as OneDrive leaves them on Windows
+            ops.remove_tree(d)
+            self.assertFalse(d.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -4,6 +4,7 @@
   v3tree doctor                       check the configuration (exit 0 ok / 1 notes / 2 errors)
   v3tree index                        build the global index
   v3tree roots SPEC                   show how an id or TAG resolves to roots
+  v3tree near ID [--json]             one node and its direct neighbours, each with file:line
   v3tree new NAME SPEC "THEME"        new case for judging (AI or by hand), with a decisions file
   v3tree expand NAME                  list what still needs a judgment
   v3tree render NAME                  map.html + report.md + subgraph.json
@@ -14,7 +15,7 @@
 Every command takes --config PATH (default: <install>/config/local.json).
 """
 from __future__ import annotations
-import argparse, json, sys
+import argparse, json, sys, re
 from pathlib import Path
 
 from . import config as C, judge as J, ops, i18n, __version__
@@ -144,6 +145,49 @@ def cmd_roots(args):
     return 0
 
 
+def near(g, spec):
+    """One node and every node it touches directly, grouped by direction, each link with file:line."""
+    nodes = g['nodes']
+    if spec in nodes:
+        keys = [spec]
+    elif re.fullmatch(r'[A-Z0-9]{2,4}', spec) and f'tag:{spec}' in nodes:
+        keys = [f'tag:{spec}']
+    else:
+        keys = [k for k, n in nodes.items() if n['id'] == spec]
+    out = []
+    for k in keys:
+        def group(edges, other):
+            by = {}
+            for e in edges:
+                o = e[other]
+                by.setdefault(o, []).append({'kind': e['k'], 'ctx': e.get('ctx', ''), 'at': f"{e['file']}:{e['line']}",
+                                             **({'flags': e['flags']} if e.get('flags') else {})})
+            return [{'key': o, 'name': nodes[o].get('name'), 'type': J.describe(g, o)['type'], 'links': ls}
+                    for o, ls in sorted(by.items(), key=lambda x: (x[0].split(':', 1)[0], x[0]))]
+        out.append({**J.describe(g, k), 'out': group(g['out'][k], 't'), 'in': group(g['in'][k], 's')})
+    return out
+
+
+def cmd_near(args):
+    cfg = need_cfg(args)
+    res = near(J.load_index(ops.out_dir(cfg)), args.spec)
+    if not res:
+        _p(f'not found: {args.spec}')
+        return 1
+    if args.json:
+        _p(json.dumps(res, ensure_ascii=False, indent=1))
+        return 0
+    for d in res:
+        _p(f"{d['key']}  {d['name']}  [{d['type']}]  {d['at']}")
+        for title, arrow, part in (('calls / reads', '->', 'out'), ('called / read by', '<-', 'in')):
+            _p(f"  {title} ({len(d[part])})")
+            for o in d[part]:
+                first = o['links'][0]
+                more = f"  (+{len(o['links']) - 1})" if len(o['links']) > 1 else ''
+                _p(f"    {arrow} {o['key']}  {o['name']}  [{first['kind']} · {first['ctx']}]  {first['at']}{more}")
+    return 0
+
+
 def cmd_new(args):
     cfg = need_cfg(args)
     g = J.load_index(ops.out_dir(cfg))
@@ -217,6 +261,8 @@ def main(argv=None):
     a.add_argument('--output', help='output folder (default: <repository>/output)')
     sub.add_parser('doctor'); sub.add_parser('index'); sub.add_parser('cases')
     a = sub.add_parser('roots'); a.add_argument('spec')
+    a = sub.add_parser('near', help='one node and its direct neighbours with file:line; walk a chain step by step')
+    a.add_argument('spec'); a.add_argument('--json', action='store_true')
     a = sub.add_parser('new'); a.add_argument('name'); a.add_argument('spec'); a.add_argument('theme', nargs='?', default='')
     a = sub.add_parser('expand'); a.add_argument('name')
     a = sub.add_parser('render'); a.add_argument('name')
@@ -232,7 +278,7 @@ def main(argv=None):
     if args.config:
         args.config = Path(args.config)
     i18n.set_lang(C.load(args.config).get('ui_language', 'en'))
-    fn = {'init': cmd_init, 'doctor': cmd_doctor, 'index': cmd_index, 'roots': cmd_roots, 'new': cmd_new,
+    fn = {'init': cmd_init, 'doctor': cmd_doctor, 'index': cmd_index, 'roots': cmd_roots, 'near': cmd_near, 'new': cmd_new,
           'expand': cmd_expand, 'render': cmd_render, 'search': cmd_search, 'serve': cmd_serve, 'cases': cmd_cases}.get(args.cmd)
     if not fn:
         p.print_help()

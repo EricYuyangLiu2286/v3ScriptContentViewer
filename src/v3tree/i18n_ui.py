@@ -71,6 +71,15 @@ UI = {
                       'Click to switch. Compact: when a node has many children, they and their subtrees are wrapped '
                       'into several columns side by side, so the map comes out closer to screen shape. '
                       'Tree: all children in one column.'),
+    'ui.focus_start': ('专注此节点', 'Focus on this node'),
+    'ui.focus_exit': ('退出专注', 'Exit focus'),
+    'ui.focus_back': ('后退一步', 'Back one step'),
+    'ui.focus_title': ('专注链：', 'Focus chain:'),
+    'ui.focus_out': ('它调用或读取的', 'What it calls or reads'),
+    'ui.focus_in': ('调用或读取它的', 'What calls or reads it'),
+    'ui.focus_hint': ('只显示链上的节点和最后一个节点的全部邻居。点右边的节点沿链往下走，点链上的节点退回，Esc 后退一步。',
+                      'Shows only the chain and every neighbour of its last node. Click a node on the right to follow '
+                      'the chain, click a chain node to go back, Esc steps back.'),
     'ui.root_fixed': ('根节点是这张图的起点，不能去掉或设为边界。要换根节点，请新建一次搜索。',
                       'The root is where this map starts; it cannot be removed or made a boundary. '
                       'To change the root, start a new search.'),
@@ -110,6 +119,12 @@ UI = {
     'ui.languages': ('本地化语言（逗号分隔，靠前的优先）', 'Localisation languages (comma separated, first wins)'),
     'ui.ui_language': ('界面语言', 'Interface language'),
     'ui.output_dir': ('输出目录', 'Output folder'),
+    'ui.out_hint': ('索引、所有会话、地图和报告都存在这里。留空就用工具目录下的 output 文件夹。',
+                    'The index, every session, map and report are kept here. Leave it empty to use the '
+                    'output folder inside the tool.'),
+    'ui.out_move': ('改了目录时，把已有的索引和会话一起搬过去', 'When the folder changes, move the existing index and sessions too'),
+    'ui.out_moved': ('已把 {n} 个会话和索引搬到 {p}', 'Moved {n} sessions and the index to {p}'),
+    'ui.out_move_skip': ('新目录里已有同名内容，没有搬：{x}（仍在 {p}）', 'Already in the new folder, not moved: {x} (still in {p})'),
     'ui.save': ('保存', 'Save'),
     'ui.need_one_path': ('请至少填写游戏安装路径或一个 MOD 路径。', 'Give at least the game folder or one mod folder.'),
     'ui.check': ('检查', 'Check'),

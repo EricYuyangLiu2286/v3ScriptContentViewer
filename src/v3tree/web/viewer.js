@@ -30,7 +30,9 @@ function tint(hex,a){ const n=parseInt(hex.slice(1),16); const r=n>>16,g=(n>>8)&
 let opts = {}, D = null, byKey, roots, outE, inE, parent, children, side, depth;
 let POS = new Map(), curEdges = [], curVis = new Set(), box = {x0:0,y0:0,w:0,h:0};
 const st = { types:new Set(GROUPS), labels:true, soft:true, boundary:true, disabled:false,
-  collapsed:new Set(), sel:null, multi:new Set(), k:1, tx:40, ty:40, layout:'compact' };
+  collapsed:new Set(), sel:null, multi:new Set(), k:1, tx:40, ty:40, layout:'compact',
+  focus:null };   // focus chain: the keys walked so far, or null for the whole map
+let FL = [];      // group labels drawn in focus mode
 try { const v=localStorage.getItem('v3tree.layout'); if(v==='tree'||v==='compact') st.layout=v; } catch(e){}
 let svg, vp, gE, gN;
 
@@ -57,7 +59,61 @@ function buildTree(){
 }
 function hiddenByCollapse(){ const h=new Set(); for(const c of st.collapsed){ const stack=[...(children.get(c)||[])];
   while(stack.length){ const x=stack.pop(); if(h.has(x)) continue; h.add(x); (children.get(x)||[]).forEach(y=>stack.push(y)); } } return h; }
-function visibleNodes(){ const hc=hiddenByCollapse(); const vis=new Set();
+// ---------------- focus chain: the walked nodes in a row, plus every neighbour of the last one
+function edgeShown(e){ return (st.soft||!e.soft) && (st.disabled || !e.flags.includes('disabled')); }
+function nodeShown(n){ return st.types.has(grp(n.t)) && (!n.dis || st.disabled) && (n.v!=='boundary' || st.boundary); }
+function nbrsOf(k){ const m=new Map();   // neighbour -> 'out' (k uses it), 'in' (it uses k) or 'both'
+  for(const e of outE.get(k)||[]) if(edgeShown(e) && e.t!==k) m.set(e.t, m.get(e.t)==='in'?'both':(m.get(e.t)||'out'));
+  for(const e of inE.get(k)||[]) if(edgeShown(e) && e.s!==k) m.set(e.s, m.get(e.s)==='out'?'both':(m.get(e.s)||'in'));
+  return m; }
+const focusLast = () => st.focus[st.focus.length-1];
+function focusMain(e){ const ch=st.focus, L=focusLast(); if(e.s===L||e.t===L) return true;
+  const i=ch.indexOf(e.s), j=ch.indexOf(e.t); return i>=0 && j>=0 && Math.abs(i-j)===1; }
+function focusTo(k){ if(!byKey.has(k)) return;
+  const ch=st.focus||[], i=ch.indexOf(k);
+  st.focus = i>=0 ? ch.slice(0,i+1) : (ch.length && nbrsOf(ch[ch.length-1]).has(k) ? ch.concat([k]) : [k]);
+  st.multi.clear(); draw(); syncFocusBar(); select(k); fitFocus(); }
+function focusBack(){ if(!st.focus) return; if(st.focus.length>1) focusTo(st.focus[st.focus.length-2]); else focusExit(); }
+function focusExit(){ st.focus=null; draw(); syncFocusBar(); fit(); }
+function syncFocusBar(){ const fb=$('focusBar'); if(!fb) return;
+  if(!st.focus){ fb.style.display='none'; return; }
+  const ch=st.focus, arrow=(a,b)=>{ const o=(outE.get(a)||[]).some(e=>e.t===b), i=(inE.get(a)||[]).some(e=>e.s===b); return o&&i?'↔':(o?'→':'←'); };
+  fb.innerHTML=`<b>${esc(t('ui.focus_title'))}</b> `+ch.map((k,i)=>(i?`<span class="ar">${arrow(ch[i-1],k)}</span>`:'')+
+    `<a data-fk="${esc(k)}" class="${i===ch.length-1?'cur':''}">${esc(cut(byKey.get(k).name,18))}</a>`).join('')+
+    ` <button data-fb="back">${esc(t('ui.focus_back'))}</button><button data-fb="exit">${esc(t('ui.focus_exit'))}</button>`+
+    `<div class="muted">${esc(t('ui.focus_hint'))}</div>`;
+  fb.style.display='block';
+  fb.querySelectorAll('[data-fk]').forEach(a=>a.onclick=()=>focusTo(a.dataset.fk));
+  fb.querySelector('[data-fb="back"]').onclick=focusBack; fb.querySelector('[data-fb="exit"]').onclick=focusExit; }
+function focusLayout(vis){
+  POS=new Map(); FL=[];
+  const ch=st.focus, nb=nbrsOf(focusLast());
+  ch.forEach((k,i)=>POS.set(k,{x:i*COLW, y:0, g:0}));
+  const ord=(a,b)=>((TPRI[byKey.get(a).t]??20)-(TPRI[byKey.get(b).t]??20)) || String(byKey.get(a).name).localeCompare(String(byKey.get(b).name));
+  const rest=[...vis].filter(k=>!ch.includes(k));
+  const outs=rest.filter(k=>nb.get(k)!=='in').sort(ord), ins=rest.filter(k=>nb.get(k)==='in').sort(ord);
+  // rows per column so the neighbour block comes out about window-shaped
+  const r=svg.getBoundingClientRect(), want=(r.width>200 && r.height>200) ? r.width/r.height : ASPECT, pitch=NW+WRAP_GAP;
+  const per=Math.max(6, Math.ceil(Math.sqrt((outs.length+ins.length)*pitch/(ROWH*want))));
+  const X0=ch.length*COLW, placed=[]; let y=0;
+  for(const [list,lab] of [[outs,'ui.focus_out'],[ins,'ui.focus_in']]){ if(!list.length) continue;
+    FL.push({x:X0, y, text:`${t(lab)} (${list.length})`});
+    list.forEach((k,i)=>{ const c=Math.floor(i/per); POS.set(k,{x:X0+c*pitch, y:y+ROWH*0.5+(i%per)*ROWH, g:c}); placed.push(k); });
+    y += ROWH*0.5 + Math.min(per,list.length)*ROWH + ROWH*0.4; }
+  const sh = NH/2 - y/2;   // centre the neighbour blocks on the chain row
+  placed.forEach(k=>POS.get(k).y+=sh); FL.forEach(f=>f.y+=sh);
+  return bounds(); }
+function bounds(){ let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  POS.forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
+  FL.forEach(f=>{ y0=Math.min(y0,f.y); });
+  if(!POS.size){ x0=y0=0; x1=y1=1; }
+  return {x0,y0,w:x1-x0,h:y1-y0}; }
+
+function visibleNodes(){
+  if(st.focus){ const vis=new Set(st.focus);
+    for(const o of nbrsOf(focusLast()).keys()){ const n=byKey.get(o); if(n && nodeShown(n)) vis.add(o); }
+    return vis; }
+  const hc=hiddenByCollapse(); const vis=new Set();
   for(const n of D.nodes){ if(hc.has(n.k)) continue; if(!st.types.has(grp(n.t))) continue;
     if(n.dis && !st.disabled) continue; if(n.v==='boundary' && !st.boundary) continue; vis.add(n.k); }
   roots.forEach(r=>vis.add(r)); return vis; }
@@ -65,6 +121,8 @@ function visibleEdges(vis){ return D.edges.filter(e=>vis.has(e.s)&&vis.has(e.t)&
 
 // ---------------- layout: callers/readers of the root on the left, what it leads to on the right
 function layout(vis){
+  if(st.focus) return focusLayout(vis);
+  FL=[];
   const vkids=new Map(); vis.forEach(k=>vkids.set(k,[]));
   const vpar=k=>{ let p=parent.get(k); while(p && !vis.has(p)) p=parent.get(p); return p; };
   const order=[], seenW=new Set();
@@ -105,10 +163,7 @@ function layout(vis){
   if(R) R.kids.forEach(q=>put(q.k, COLW+q.dx, q.dy, 1, q.col));
   if(Lf){ const sh=rootY-Lf.mid; Lf.kids.forEach(q=>put(q.k, COLW+q.dx, q.dy+sh, -1, q.col)); }
   roots.forEach((r,i)=>POS.set(r,{x:0,y:rootY+i*ROWH,g:0}));
-  let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
-  POS.forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
-  if(!POS.size){ x0=y0=0; x1=y1=1; }
-  return {x0,y0,w:x1-x0,h:y1-y0};
+  return bounds();
 }
 
 // ---------------- draw
@@ -121,7 +176,7 @@ function draw(){
     if(b.x>a.x){ x1=a.x+NW; x2=b.x; const m=Math.max(40,(x2-x1)*0.5); d=`M${x1},${y1} C${x1+m},${y1} ${x2-m},${y2} ${x2},${y2}`; }
     else if(b.x<a.x){ x1=a.x; x2=b.x+NW; const m=Math.max(40,(x1-x2)*0.5); d=`M${x1},${y1} C${x1-m},${y1} ${x2+m},${y2} ${x2},${y2}`; }
     else { x1=a.x+NW; x2=b.x+NW; const bulge=40+Math.min(300,Math.abs(y2-y1)*0.12); d=`M${x1},${y1} C${x1+bulge},${y1} ${x2+bulge},${y2} ${x2},${y2}`; }
-    const isTree = parent.get(e.t)===e.s || parent.get(e.s)===e.t;
+    const isTree = st.focus ? focusMain(e) : (parent.get(e.t)===e.s || parent.get(e.s)===e.t);
     const inGrid = isTree && (a.g||b.g);   // runs under the grid's first columns: label only when selected
     const g=el('g',{class:['edge', e.soft?'soft':e.k, e.flags.includes('disabled')?'disabled':'', isTree?'':'xt', inGrid?'gl':''].join(' '),'data-i':e.i},gE);
     const mk = e.soft?'arSoft':(e.k==='call'?'arCall':(e.k==='struct'?'arStruct':'arCond'));
@@ -134,7 +189,8 @@ function draw(){
   for(const k of curVis){
     const n=byKey.get(k), p=POS.get(k); if(!p) continue;
     const col=COLORS[n.t]||'#777';
-    const cls='node'+(n.v==='boundary'?' boundary':'')+(n.dis?' disabled':'')+(n.v==='unjudged'?' pending':'')+(n.fresh?' fresh':'')+(st.multi.has(k)?' multi':'');
+    const cls='node'+(n.v==='boundary'?' boundary':'')+(n.dis?' disabled':'')+(n.v==='unjudged'?' pending':'')+(n.fresh?' fresh':'')+(st.multi.has(k)?' multi':'')+
+      (st.focus && st.focus.includes(k)?' chain':'');
     const g=el('g',{class:cls,transform:`translate(${p.x},${p.y})`,'data-k':k},gN);
     el('rect',{class:'box',width:NW,height:NH,rx:7,fill:tint(col, n.v==='boundary'?0.08:(n.v==='unjudged'?0.1:0.18)),stroke:col},g);
     el('rect',{x:0,y:0,width:6,height:NH,rx:3,fill:col},g);
@@ -149,23 +205,34 @@ function draw(){
     if(top.length) el('text',{class:'badge',x:NW-4,y:-4,'text-anchor':'end'},g).textContent=top.join(' · ');
     if(n.dis) el('text',{class:'badge',x:4,y:-4},g).textContent=t('ui.disabled_badge');
     const ch=children.get(k);
-    if(ch && ch.length){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
+    if(ch && ch.length && !st.focus){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
       el('circle',{r:8,fill:tint(col,0.5),stroke:col},tg);
       el('text',{x:0,y:4,'text-anchor':'middle',style:'font-size:12px;fill:var(--ink);pointer-events:none'},tg).textContent = st.collapsed.has(k)?'+':'−';
       tg.addEventListener('click',ev=>{ ev.stopPropagation(); if(st.collapsed.has(k)) st.collapsed.delete(k); else st.collapsed.add(k); draw(); }); }
     el('title',{},g).textContent=`${n.name}\n${n.id}\n${n.tz}${n.v==='boundary'?'\n'+t('ui.boundary_badge')+n.sys:''}`;
     g.addEventListener('click',ev=>{ ev.stopPropagation();
       if(opts.editable && (ev.ctrlKey||ev.metaKey)){ if(st.multi.has(k)) st.multi.delete(k); else st.multi.add(k); draw(); showMulti(); return; }
+      if(st.focus){ focusTo(k); return; }
       st.multi.clear(); select(k); });
   }
+  for(const f of FL) el('text',{class:'flabel',x:f.x,y:f.y+14},gN).textContent=f.text;
   const cnt=$('cnt'); if(cnt) cnt.textContent = t('ui.count',{a:curVis.size,b:D.nodes.length,e:curEdges.length});
   applySel(); applyTransform();
 }
 function applyTransform(){ vp.setAttribute('transform',`translate(${st.tx},${st.ty}) scale(${st.k})`); svg.classList.toggle('far', st.k<0.45); }
 function sideW(){ return $('side').style.display==='block'?470:0; }
-function fit(){ const r=svg.getBoundingClientRect();
-  const k=Math.min((r.width-sideW()-40)/Math.max(box.w,1),(r.height-40)/Math.max(box.h,1),1.2); st.k=Math.max(k,0.03);
-  st.tx=20-box.x0*st.k; st.ty=20-box.y0*st.k; applyTransform(); }
+function fit(){ fitTo(box, 1.2); }
+function fitTo(b, maxK){ const r=svg.getBoundingClientRect();
+  const fb=$('focusBar'), top=(fb && fb.style.display==='block') ? fb.offsetHeight+12 : 0;   // keep clear of the focus bar
+  const k=Math.min((r.width-sideW()-40)/Math.max(b.w,1),(r.height-40-top)/Math.max(b.h,1),maxK); st.k=Math.max(k,0.03);
+  st.tx=20-b.x0*st.k; st.ty=20+top-b.y0*st.k; applyTransform(); }
+// in focus mode, frame the newest step (its node and its neighbours), not the whole walked chain
+function fitFocus(){ if(!st.focus) return; const L=focusLast(); let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  POS.forEach((p,k)=>{ if(st.focus.includes(k) && k!==L) return;
+    x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
+  FL.forEach(f=>{ y0=Math.min(y0,f.y); });
+  if(st.focus.length>1){ x0-=COLW*0.6; }   // a glimpse of the previous step
+  fitTo({x0,y0,w:x1-x0,h:y1-y0}, 1); }
 function center(k){ const p=POS.get(k); if(!p) return; const r=svg.getBoundingClientRect();
   st.k=Math.max(st.k,0.8); st.tx=(r.width-sideW())/2-(p.x+NW/2)*st.k; st.ty=r.height/2-(p.y+NH/2)*st.k; applyTransform(); }
 
@@ -211,6 +278,7 @@ function select(k){
   panel.innerHTML = `<button class="close" id="xClose">×</button><h2>${esc(n.name)}${n.noloc?' <span class="pill">'+esc(t('ui.noloc_pill'))+'</span>':''}</h2>
   <div class="sub">${esc(n.id)}</div>
   <div style="margin-top:6px"><span class="pill">${esc(n.tz)}</span><span class="pill">${esc(state)}${n.sys?' · '+esc(n.sys):''}</span>${n.dis?'<span class="pill">'+esc(t('ui.disabled_badge'))+': '+esc(n.dis)+'</span>':''}</div>
+  <div class="acts"><button id="xFocus" title="${esc(t('ui.focus_hint'))}">${esc(t(st.focus?'ui.focus_exit':'ui.focus_start'))}</button></div>
   ${actButtons([k], n.v)}
   <div class="muted" style="margin-top:6px">${esc(t('ui.judgment'))}${esc(n.why)} <span class="pill">${esc(n.src)}</span>${n.from?'<br>'+t('ui.found_by',{x:'<a data-go="'+esc(n.from)+'">'+esc((byKey.get(n.from)||{}).name||n.from)+'</a>'}):''}</div>
   ${n.ls?'<div class="muted">'+esc(t('ui.loc'))+esc(n.nk)+' @ '+esc(n.ls)+'</div>':''}
@@ -221,9 +289,11 @@ function select(k){
   <h3>${esc(t('ui.hidden_nb'))} (${hid.length})</h3>${hid.map(h=>`<div class="el">${h.d==='out'?'→':'←'} ${esc(h.name)} <code>${esc(h.o)}</code><br><b>${esc(h.ctx)}</b> <code>${esc(h.at)}</code><br><span class="muted">${esc(vname(h.v))}${h.why?': '+esc(h.why):''}</span></div>`).join('')||'<span class="muted">'+esc(t('ui.none'))+'</span>'}`;
   panel.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',()=>goTo(a.dataset.go)));
   bindActs(panel,[k]);
+  $('xFocus').onclick=()=>{ if(st.focus) focusExit(); else focusTo(k); };
   $('xClose').onclick=()=>{ panel.style.display='none'; st.sel=null; applySel(); };
 }
 function goTo(k){ if(!byKey.has(k)) return; const n=byKey.get(k);
+  if(st.focus){ st.types.add(grp(n.t)); syncLegend(); focusTo(k); return; }
   let p=parent.get(k); while(p){ st.collapsed.delete(p); p=parent.get(p); }
   st.types.add(grp(n.t)); syncLegend(); if(n.dis) st.disabled=true; if(n.v==='boundary') st.boundary=true; syncOpts();
   draw(); center(k); select(k);
@@ -253,7 +323,8 @@ function syncOpts(){ const m={optLabels:'labels',optSoft:'soft',optBoundary:'bou
   for(const id in m){ const e=$(id); if(e) e.checked=st[m[id]]; }
   const bl=$('btnLayout'); if(bl){ bl.textContent=t(st.layout==='compact'?'ui.layout_compact':'ui.layout_tree'); bl.title=t('ui.layout_tip'); } }
 function placeChrome(){ const top=$('top'); const h=top?top.offsetHeight:0;
-  ['stage','side'].forEach(id=>{ const e=$(id); if(e) e.style.top=h+'px'; }); const r=$('results'); if(r) r.style.top=(h+2)+'px'; }
+  ['stage','side'].forEach(id=>{ const e=$(id); if(e) e.style.top=h+'px'; }); const r=$('results'); if(r) r.style.top=(h+2)+'px';
+  const fb=$('focusBar'); if(fb) fb.style.top=(h+8)+'px'; }
 function foldTo(level){ st.collapsed.clear(); depth.forEach((d,k)=>{ if(d===level && (children.get(k)||[]).length) st.collapsed.add(k); }); }
 
 function init(o){
@@ -271,8 +342,11 @@ function init(o){
   bind('optBoundary',ev=>{st.boundary=ev.target.checked; draw();},'onchange');
   bind('optDisabled',ev=>{st.disabled=ev.target.checked; draw();},'onchange');
   bind('btnFit',()=>fit());
-  bind('btnExpand',()=>{ st.collapsed.clear(); draw(); });
-  bind('btnFold',()=>{ foldTo(3); draw(); fit(); });
+  bind('btnExpand',()=>{ st.focus=null; syncFocusBar(); st.collapsed.clear(); draw(); });
+  bind('btnFold',()=>{ st.focus=null; syncFocusBar(); foldTo(3); draw(); fit(); });
+  if(!$('focusBar')){ const fb=document.createElement('div'); fb.id='focusBar'; document.body.appendChild(fb); }
+  window.addEventListener('keydown',ev=>{ if(ev.key!=='Escape' || !st.focus) return;
+    const a=document.activeElement; if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return; focusBack(); });
   bind('btnLayout',()=>{ st.layout = st.layout==='compact'?'tree':'compact';
     try { localStorage.setItem('v3tree.layout', st.layout); } catch(e){}
     syncOpts(); draw(); if(st.sel && POS.has(st.sel)) center(st.sel); else fit(); });
@@ -303,13 +377,15 @@ function init(o){
 }
 function load(data, keepView){
   D=data; buildTree();
-  if(!keepView){ st.collapsed.clear(); st.sel=null; st.multi.clear(); foldTo(3); }
-  else { [...st.collapsed].forEach(k=>{ if(!byKey.has(k)) st.collapsed.delete(k); }); [...st.multi].forEach(k=>{ if(!byKey.has(k)) st.multi.delete(k); }); }
+  if(!keepView){ st.collapsed.clear(); st.sel=null; st.multi.clear(); st.focus=null; foldTo(3); }
+  else { [...st.collapsed].forEach(k=>{ if(!byKey.has(k)) st.collapsed.delete(k); }); [...st.multi].forEach(k=>{ if(!byKey.has(k)) st.multi.delete(k); });
+    if(st.focus){ const i=st.focus.findIndex(k=>!byKey.has(k)); if(i>=0) st.focus=st.focus.slice(0,i); if(!st.focus.length) st.focus=null; } }
+  syncFocusBar();
   const ttl=$('ttl'); if(ttl) ttl.textContent=D.meta.title||'';
   const thm=$('thm'); if(thm) thm.textContent=D.meta.theme ? t('ui.theme_prefix')+D.meta.theme : '';
   buildLegend(); placeChrome(); draw();
   if(!keepView){ fit(); if(st.k<0.3 && roots.length){ st.k=0.6; center(roots[0]); } }
   if(keepView && st.sel && byKey.has(st.sel)) select(st.sel); else if(keepView && st.sel){ st.sel=null; $('side').style.display='none'; }
 }
-return {init, load, fit, goTo, placeChrome, state: st};
+return {init, load, fit, goTo, focusTo, placeChrome, state: st};
 })();

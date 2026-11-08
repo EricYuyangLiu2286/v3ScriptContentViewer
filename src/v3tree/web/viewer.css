@@ -56,6 +56,16 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .edge.gl text{display:none}
 .edge.gl.hot path{opacity:1}
 .edge.gl.hot text{display:inline}
+#focusBar{display:none;position:fixed;left:12px;max-width:calc(100% - 520px);min-width:280px;background:var(--panel);border:1px solid var(--hl);
+  border-radius:8px;padding:6px 10px;z-index:4;font-size:12.5px;line-height:1.9}
+#focusBar a{cursor:pointer;color:var(--call);margin:0 2px}
+#focusBar a.cur{color:var(--ink);font-weight:600}
+#focusBar .ar{color:var(--ink2);margin:0 3px}
+#focusBar button{margin-left:6px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);cursor:pointer}
+#focusBar .muted{line-height:1.4}
+.flabel{font-size:13px;font-weight:600;fill:var(--ink2)}
+.node.chain .box{stroke:var(--hl);stroke-width:2.5}
+@media (max-width:900px){ #focusBar{max-width:calc(100% - 24px)} }
 .allLabels .edge.xt text{display:inline}
 .edge.xt.hot path{opacity:1}
 .edge.xt.hot text{display:inline}

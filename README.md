@@ -33,7 +33,10 @@ Run commands from the repository folder as `python run.py <command>`. Optional: 
 
    ![New search: autocomplete for the root, stop rules below](docs/images/new-search.png)
 4. Click nodes to see their code, file:line and every connection. **Accept**, **Draw, don't expand** or **Remove**; Ctrl-click to select several. **Search further** grows the tree from accepted and undecided nodes. **Undo** steps back.
+   **Focus on this node** (in the node panel) hides the rest of the map and shows only that node and its direct neighbours. Click a neighbour to follow the chain one step; the bar at the top shows the path, click any step to go back, Esc steps back.
 5. **Sign off:** the map, a report and a JSON file are saved in `output/cases/<name>/`. `map.html` opens by double-click, offline.
+
+Everything is saved in the `output` folder inside the tool unless you set **Output folder** in Settings; tick "move the existing index and sessions too" to take your sessions along when you change it.
 
 ## Use it with an AI agent
 
@@ -47,6 +50,7 @@ python run.py index                                 # build the index
 python run.py search je_acw_countdown --steps 5     # automatic map with stop rules
 python run.py new acw je_acw_countdown "The ACW countdown and the war"   # a case to judge
 python run.py expand acw                            # list undecided neighbours
+python run.py near nesnd_south_holdouts.1          # one node and its direct neighbours, each with file:line (--json for agents)
 python run.py render acw                            # map.html + report.md + subgraph.json
 python run.py serve                                 # the web interface
 ```

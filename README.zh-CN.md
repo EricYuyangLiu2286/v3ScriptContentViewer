@@ -33,7 +33,10 @@
 
    ![新搜索：根节点自动补全，下方是停止规则](docs/images/new-search.png)
 4. 点节点可以看代码、文件:行号和全部连线。可以**接受**、**只画不展开**或**去掉**，按住 Ctrl 点击可多选。**继续搜索**会从已接受和待定的节点往外再找；**撤销**退回上一步。
+   节点面板里的**专注此节点**会隐藏图的其余部分，只显示这个节点和它的直接邻居。点一个邻居就沿链往下走一步；顶部的路径条显示走过的路，点任一步可以退回，Esc 后退一步。
 5. **验收完成**：图、报告和 JSON 保存在 `output/cases/<会话名>/`。`map.html` 离线双击即可打开。
+
+所有内容默认存在工具目录下的 `output` 文件夹里，可以在设置里改**输出目录**；改的时候勾选"把已有的索引和会话一起搬过去"，旧的会话会跟着搬。
 
 ## 交给 AI 用
 
@@ -47,6 +50,7 @@ python run.py index                                 # 建立索引
 python run.py search je_acw_countdown --steps 5     # 按停止规则自动出图
 python run.py new acw je_acw_countdown "美国内战倒计时及其引发的战争"   # 新建需要判定的用例
 python run.py expand acw                            # 列出待判定的邻居
+python run.py near nesnd_south_holdouts.1          # 一个节点和它的直接邻居，每条带文件:行号（AI 用 --json）
 python run.py render acw                            # 生成 map.html、report.md、subgraph.json
 python run.py serve                                 # 网页界面
 ```
