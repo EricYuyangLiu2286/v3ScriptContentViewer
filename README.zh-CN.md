@@ -66,4 +66,4 @@ python -m unittest discover -s tests
 
 ## 许可与致谢
 
-MIT，见 [LICENSE](LICENSE)。脚本解析器（`src/v3tree/clausewitz.py`）来自 Neo-Era Southern and Northern Dynasties MOD 的开发工具。维多利亚3 是 Paradox Interactive 的产品，本项目与 Paradox 无关。
+MIT，见 [LICENSE](LICENSE)。脚本解析器（`src/v3tree/clausewitz.py`）来自 Neo-Era Southern and Northern Dynasties MOD 的开发工具。维多利亚3 是 Paradox Interactive 的产品（商标），本项目与 Paradox 无关。
