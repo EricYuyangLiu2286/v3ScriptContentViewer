@@ -31,8 +31,7 @@ let opts = {}, D = null, byKey, roots, outE, inE, parent, children, side, depth;
 let POS = new Map(), curEdges = [], curVis = new Set(), box = {x0:0,y0:0,w:0,h:0};
 const st = { types:new Set(GROUPS), labels:true, soft:true, boundary:true, disabled:false,
   collapsed:new Set(), sel:null, multi:new Set(), k:1, tx:40, ty:40, layout:'compact',
-  focus:null };   // focus chain: the keys walked so far, or null for the whole map
-let FL = [];      // group labels drawn in focus mode
+  focus:null };   // focus mode: {root, open:[...]}, or null for the whole map
 try { const v=localStorage.getItem('v3tree.layout'); if(v==='tree'||v==='compact') st.layout=v; } catch(e){}
 let svg, vp, gE, gN;
 
@@ -59,59 +58,64 @@ function buildTree(){
 }
 function hiddenByCollapse(){ const h=new Set(); for(const c of st.collapsed){ const stack=[...(children.get(c)||[])];
   while(stack.length){ const x=stack.pop(); if(h.has(x)) continue; h.add(x); (children.get(x)||[]).forEach(y=>stack.push(y)); } } return h; }
-// ---------------- focus chain: the walked nodes in a row, plus every neighbour of the last one
+// ---------------- focus: a small tree of its own. It starts with one node and its neighbours; clicking a
+// node opens its neighbours beside it, and what was opened before stays. st.focus = {root, open:[keys in the
+// order they were opened]}; FT is the tree built from it, in the same shape the main map uses.
+let FT = null;
 function edgeShown(e){ return (st.soft||!e.soft) && (st.disabled || !e.flags.includes('disabled')); }
 function nodeShown(n){ return st.types.has(grp(n.t)) && (!n.dis || st.disabled) && (n.v!=='boundary' || st.boundary); }
 function nbrsOf(k){ const m=new Map();   // neighbour -> 'out' (k uses it), 'in' (it uses k) or 'both'
   for(const e of outE.get(k)||[]) if(edgeShown(e) && e.t!==k) m.set(e.t, m.get(e.t)==='in'?'both':(m.get(e.t)||'out'));
   for(const e of inE.get(k)||[]) if(edgeShown(e) && e.s!==k) m.set(e.s, m.get(e.s)==='out'?'both':(m.get(e.s)||'in'));
   return m; }
-const focusLast = () => st.focus[st.focus.length-1];
-function focusMain(e){ const ch=st.focus, L=focusLast(); if(e.s===L||e.t===L) return true;
-  const i=ch.indexOf(e.s), j=ch.indexOf(e.t); return i>=0 && j>=0 && Math.abs(i-j)===1; }
-function focusTo(k){ if(!byKey.has(k)) return;
-  const ch=st.focus||[], i=ch.indexOf(k);
-  st.focus = i>=0 ? ch.slice(0,i+1) : (ch.length && nbrsOf(ch[ch.length-1]).has(k) ? ch.concat([k]) : [k]);
-  st.multi.clear(); draw(); syncFocusBar(); select(k); fitFocus(); }
-function focusBack(){ if(!st.focus) return; if(st.focus.length>1) focusTo(st.focus[st.focus.length-2]); else focusExit(); }
-function focusExit(){ st.focus=null; draw(); syncFocusBar(); fit(); }
+// a neighbour belongs to the opened node nearest the start; callers go left of the start, the rest right
+function focusTree(){
+  const f=st.focus, opened=new Set(f.open), seen=new Set([f.root]), q=[f.root];
+  const T={roots:[f.root], children:new Map(), parent:new Map(), side:new Map([[f.root,0]]), opened, all:seen, more:new Set()};
+  const ord=(a,b)=>((a.d==='in')-(b.d==='in')) || ((TPRI[byKey.get(a.o).t]??20)-(TPRI[byKey.get(b.o).t]??20)) ||
+    String(byKey.get(a.o).name).localeCompare(String(byKey.get(b.o).name));
+  while(q.length){ const c=q.shift(); if(!opened.has(c)) continue;
+    const cand=[...nbrsOf(c)].map(([o,d])=>({o,d})).filter(x=>byKey.has(x.o)).sort(ord);
+    for(const {o,d} of cand){ if(seen.has(o)) continue; seen.add(o); T.parent.set(o,c);
+      if(!T.children.has(c)) T.children.set(c,[]); T.children.get(c).push(o);
+      T.side.set(o, T.side.get(c)===0 ? (d==='in'?-1:1) : T.side.get(c)); q.push(o); } }
+  // nodes that would add something if opened get a "+"
+  for(const k of seen) if(!opened.has(k)) for(const o of nbrsOf(k).keys()) if(!seen.has(o)){ T.more.add(k); break; }
+  return T; }
+function treeSrc(){ return st.focus ? FT : {roots, children, parent, side}; }
+function focusSubtree(k){ const out=[], stack=[k]; while(stack.length){ const x=stack.pop(); out.push(x); (FT.children.get(x)||[]).forEach(y=>stack.push(y)); } return out; }
+function focusStart(k){ if(!byKey.has(k)) return; st.focus={root:k, open:[k]}; st.multi.clear(); draw(); syncFocusBar(); select(k); fitFocus(k); }
+function focusOpen(k){ if(!st.focus || FT.opened.has(k) || !FT.all.has(k)) return; st.focus.open.push(k); draw(); syncFocusBar(); fitFocus(k); }
+function focusClose(k){ if(!st.focus) return;
+  if(k===st.focus.root){ focusExit(); return; }
+  const drop=new Set(focusSubtree(k)); st.focus.open=st.focus.open.filter(x=>!drop.has(x));
+  if(st.sel && drop.has(st.sel) && st.sel!==k){ st.sel=k; select(k); }
+  draw(); syncFocusBar(); }
+function focusBack(){ if(!st.focus) return; const o=st.focus.open;
+  if(o.length<=1){ focusExit(); return; }
+  const k=o.pop(); draw(); syncFocusBar(); if(st.sel && !FT.all.has(st.sel)) select(k); center(k); }
+function focusExit(){ st.focus=null; FT=null; draw(); syncFocusBar(); if(st.sel && POS.has(st.sel)) center(st.sel); else fit(); }
+// the bar shows the way from the start to the selected node; click a step to jump to it
 function syncFocusBar(){ const fb=$('focusBar'); if(!fb) return;
   if(!st.focus){ fb.style.display='none'; return; }
-  const ch=st.focus, arrow=(a,b)=>{ const o=(outE.get(a)||[]).some(e=>e.t===b), i=(inE.get(a)||[]).some(e=>e.s===b); return o&&i?'↔':(o?'→':'←'); };
+  const cur = st.sel && FT && FT.all.has(st.sel) ? st.sel : st.focus.open[st.focus.open.length-1];
+  const ch=[]; for(let x=cur; x; x=FT.parent.get(x)) ch.unshift(x);
+  const arrow=(a,b)=>{ const o=(outE.get(a)||[]).some(e=>e.t===b), i=(inE.get(a)||[]).some(e=>e.s===b); return o&&i?'↔':(o?'→':'←'); };
   fb.innerHTML=`<b>${esc(t('ui.focus_title'))}</b> `+ch.map((k,i)=>(i?`<span class="ar">${arrow(ch[i-1],k)}</span>`:'')+
     `<a data-fk="${esc(k)}" class="${i===ch.length-1?'cur':''}">${esc(cut(byKey.get(k).name,18))}</a>`).join('')+
-    ` <button data-fb="back">${esc(t('ui.focus_back'))}</button><button data-fb="exit">${esc(t('ui.focus_exit'))}</button>`+
+    ` <button data-fb="back" ${st.focus.open.length>1?'':'disabled'}>${esc(t('ui.focus_back'))}</button><button data-fb="exit">${esc(t('ui.focus_exit'))}</button>`+
     `<div class="muted">${esc(t('ui.focus_hint'))}</div>`;
   fb.style.display='block';
-  fb.querySelectorAll('[data-fk]').forEach(a=>a.onclick=()=>focusTo(a.dataset.fk));
+  fb.querySelectorAll('[data-fk]').forEach(a=>a.onclick=()=>{ select(a.dataset.fk); center(a.dataset.fk); syncFocusBar(); });
   fb.querySelector('[data-fb="back"]').onclick=focusBack; fb.querySelector('[data-fb="exit"]').onclick=focusExit; }
-function focusLayout(vis){
-  POS=new Map(); FL=[];
-  const ch=st.focus, nb=nbrsOf(focusLast());
-  ch.forEach((k,i)=>POS.set(k,{x:i*COLW, y:0, g:0}));
-  const ord=(a,b)=>((TPRI[byKey.get(a).t]??20)-(TPRI[byKey.get(b).t]??20)) || String(byKey.get(a).name).localeCompare(String(byKey.get(b).name));
-  const rest=[...vis].filter(k=>!ch.includes(k));
-  const outs=rest.filter(k=>nb.get(k)!=='in').sort(ord), ins=rest.filter(k=>nb.get(k)==='in').sort(ord);
-  // rows per column so the neighbour block comes out about window-shaped
-  const r=svg.getBoundingClientRect(), want=(r.width>200 && r.height>200) ? r.width/r.height : ASPECT, pitch=NW+WRAP_GAP;
-  const per=Math.max(6, Math.ceil(Math.sqrt((outs.length+ins.length)*pitch/(ROWH*want))));
-  const X0=ch.length*COLW, placed=[]; let y=0;
-  for(const [list,lab] of [[outs,'ui.focus_out'],[ins,'ui.focus_in']]){ if(!list.length) continue;
-    FL.push({x:X0, y, text:`${t(lab)} (${list.length})`});
-    list.forEach((k,i)=>{ const c=Math.floor(i/per); POS.set(k,{x:X0+c*pitch, y:y+ROWH*0.5+(i%per)*ROWH, g:c}); placed.push(k); });
-    y += ROWH*0.5 + Math.min(per,list.length)*ROWH + ROWH*0.4; }
-  const sh = NH/2 - y/2;   // centre the neighbour blocks on the chain row
-  placed.forEach(k=>POS.get(k).y+=sh); FL.forEach(f=>f.y+=sh);
-  return bounds(); }
 function bounds(){ let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   POS.forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
-  FL.forEach(f=>{ y0=Math.min(y0,f.y); });
   if(!POS.size){ x0=y0=0; x1=y1=1; }
   return {x0,y0,w:x1-x0,h:y1-y0}; }
 
 function visibleNodes(){
-  if(st.focus){ const vis=new Set(st.focus);
-    for(const o of nbrsOf(focusLast()).keys()){ const n=byKey.get(o); if(n && nodeShown(n)) vis.add(o); }
+  if(st.focus){ FT=focusTree(); const vis=new Set([st.focus.root]);
+    for(const k of FT.all){ const n=byKey.get(k); if(n && nodeShown(n)) vis.add(k); }
     return vis; }
   const hc=hiddenByCollapse(); const vis=new Set();
   for(const n of D.nodes){ if(hc.has(n.k)) continue; if(!st.types.has(grp(n.t))) continue;
@@ -121,8 +125,7 @@ function visibleEdges(vis){ return D.edges.filter(e=>vis.has(e.s)&&vis.has(e.t)&
 
 // ---------------- layout: callers/readers of the root on the left, what it leads to on the right
 function layout(vis){
-  if(st.focus) return focusLayout(vis);
-  FL=[];
+  const {roots, children, parent, side} = treeSrc();   // the main map's tree, or the focus tree
   const vkids=new Map(); vis.forEach(k=>vkids.set(k,[]));
   const vpar=k=>{ let p=parent.get(k); while(p && !vis.has(p)) p=parent.get(p); return p; };
   const order=[], seenW=new Set();
@@ -178,7 +181,7 @@ function edgeGeom(e){
   if(b.x>a.x){ x1=a.x+NW; x2=b.x; const m=Math.max(40,(x2-x1)*0.5); d=`M${x1},${y1} C${x1+m},${y1} ${x2-m},${y2} ${x2},${y2}`; }
   else if(b.x<a.x){ x1=a.x; x2=b.x+NW; const m=Math.max(40,(x1-x2)*0.5); d=`M${x1},${y1} C${x1-m},${y1} ${x2+m},${y2} ${x2},${y2}`; }
   else { x1=a.x+NW; x2=b.x+NW; reach=40+Math.min(300,Math.abs(y2-y1)*0.12); d=`M${x1},${y1} C${x1+reach},${y1} ${x2+reach},${y2} ${x2},${y2}`; }
-  const isTree = st.focus ? focusMain(e) : (parent.get(e.t)===e.s || parent.get(e.s)===e.t);
+  const P = treeSrc().parent, isTree = P.get(e.t)===e.s || P.get(e.s)===e.t;
   const inGrid = isTree && (a.g||b.g);   // runs under the grid's first columns: label only when selected
   const lx = b.x===a.x ? Math.max(x1,x2)+30 : (x1+x2)/2;
   return {e, d, lx, ly:(y1+y2)/2-3, x1, y1, x2, y2, reach, xt:!isTree,
@@ -224,22 +227,27 @@ function render(){
     if(p.x+NW<R.x0 || p.x>R.x1 || p.y+NH+20<R.y0 || p.y-20>R.y1) continue;
     const col=COLORS[n.t]||'#777';
     const cls='node'+(n.v==='boundary'?' boundary':'')+(n.dis?' disabled':'')+(n.v==='unjudged'?' pending':'')+(n.fresh?' fresh':'')+(st.multi.has(k)?' multi':'')+
-      (st.focus && st.focus.includes(k)?' chain':'');
+      (st.focus && (FT.opened.has(k) || k===st.focus.root)?' chain':'');
     const g=el('g',{class:cls,transform:`translate(${p.x},${p.y})`,'data-k':k},fn);
     el('rect',{class:'box',width:NW,height:NH,rx:7,fill:tint(col, n.v==='boundary'?0.08:(n.v==='unjudged'?0.1:0.18)),stroke:col},g);
     el('rect',{x:0,y:0,width:6,height:NH,rx:3,fill:col},g);
     g.addEventListener('click',ev=>{ ev.stopPropagation();
       if(opts.editable && (ev.ctrlKey||ev.metaKey)){ if(st.multi.has(k)) st.multi.delete(k); else st.multi.add(k); draw(); showMulti(); return; }
-      if(st.focus){ focusTo(k); return; }
-      st.multi.clear(); select(k); });
+      st.multi.clear(); select(k);
+      if(st.focus){ syncFocusBar(); if(FT.more.has(k)) focusOpen(k); } });   // in focus, a click also opens the node
     if(lod<1) continue;
     const nm=el('text',{class:'nm',x:12,y:18},g);
     nm.textContent = n.noloc ? cut(n.id,24) : cut(n.name,15);
+    // the ± toggle: on the main map it folds a subtree; in focus it closes an opened node or opens one
     const ch=children.get(k);
-    if(ch && ch.length && !st.focus){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
+    const tog = st.focus ? (FT.opened.has(k) && k!==st.focus.root ? '−' : (FT.more.has(k) ? '+' : ''))
+                         : (ch && ch.length ? (st.collapsed.has(k)?'+':'−') : '');
+    if(tog){ const tg=el('g',{class:'tg',transform:`translate(${NW-16},${NH/2})`},g);
       el('circle',{r:8,fill:tint(col,0.5),stroke:col},tg);
-      el('text',{x:0,y:4,'text-anchor':'middle',style:'font-size:12px;fill:var(--ink);pointer-events:none'},tg).textContent = st.collapsed.has(k)?'+':'−';
-      tg.addEventListener('click',ev=>{ ev.stopPropagation(); if(st.collapsed.has(k)) st.collapsed.delete(k); else st.collapsed.add(k); draw(); }); }
+      el('text',{x:0,y:4,'text-anchor':'middle',style:'font-size:12px;fill:var(--ink);pointer-events:none'},tg).textContent = tog;
+      tg.addEventListener('click',ev=>{ ev.stopPropagation();
+        if(st.focus){ if(tog==='−') focusClose(k); else { select(k); focusOpen(k); } return; }
+        if(st.collapsed.has(k)) st.collapsed.delete(k); else st.collapsed.add(k); draw(); }); }
     if(lod<2) continue;
     if(n.noloc) el('tspan',{class:'badge',dx:4},nm).textContent=t('ui.noloc');
     el('text',{class:'id',x:12,y:35},g).textContent = cut((n.noloc? n.tz : n.id),34);
@@ -251,7 +259,6 @@ function render(){
     if(n.dis) el('text',{class:'badge',x:4,y:-4},g).textContent=t('ui.disabled_badge');
     el('title',{},g).textContent=`${n.name}\n${n.id}\n${n.tz}${n.v==='boundary'?'\n'+t('ui.boundary_badge')+n.sys:''}`;
   }
-  for(const f of FL) el('text',{class:'flabel',x:f.x,y:f.y+14},fn).textContent=f.text;
   gE.appendChild(fe); gN.appendChild(fn);
   applySel();
 }
@@ -265,19 +272,21 @@ function applyTransform(now){ vp.setAttribute('transform',`translate(${st.tx},${
 function scheduleTransform(){ if(rafPending) return; rafPending=true; requestAnimationFrame(()=>{ rafPending=false; applyTransform(false); }); }
 function sideW(){ return $('side').style.display==='block'?470:0; }
 function fit(){ fitTo(box, 1.2); }
+// keep clear of the focus bar at the top and of the open legend at the left (callers are drawn on the left)
+function legendW(){ const lg=$('legend'), lb=$('lgBody'); if(!lg || !lb || lb.style.display==='none' || !lg.offsetWidth) return 0;
+  return Math.max(0, lg.getBoundingClientRect().right - svg.getBoundingClientRect().left); }
 function fitTo(b, maxK){ const r=svg.getBoundingClientRect();
-  const fb=$('focusBar'), top=(fb && fb.style.display==='block') ? fb.offsetHeight+12 : 0;   // keep clear of the focus bar
-  const k=Math.min((r.width-sideW()-40)/Math.max(b.w,1),(r.height-40-top)/Math.max(b.h,1),maxK); st.k=Math.max(k,0.03);
-  st.tx=20-b.x0*st.k; st.ty=20+top-b.y0*st.k; applyTransform(true); }
-// in focus mode, frame the newest step (its node and its neighbours), not the whole walked chain
-function fitFocus(){ if(!st.focus) return; const L=focusLast(); let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
-  POS.forEach((p,k)=>{ if(st.focus.includes(k) && k!==L) return;
-    x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); });
-  FL.forEach(f=>{ y0=Math.min(y0,f.y); });
-  if(st.focus.length>1){ x0-=COLW*0.6; }   // a glimpse of the previous step
+  const fb=$('focusBar'), top=(fb && fb.style.display==='block') ? fb.offsetHeight+12 : 0, left=legendW();
+  const k=Math.min((r.width-sideW()-left-40)/Math.max(b.w,1),(r.height-40-top)/Math.max(b.h,1),maxK); st.k=Math.max(k,0.03);
+  st.tx=20+left-b.x0*st.k; st.ty=20+top-b.y0*st.k; applyTransform(true); }
+// in focus mode, frame the node just opened and what it brought in, with a glimpse of where it hangs from
+function fitFocus(k){ if(!st.focus || !POS.has(k)) return; let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  for(const x of [k, ...(FT.children.get(k)||[])]){ const p=POS.get(x); if(!p) continue;
+    x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+NW); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+NH); }
+  const pp=POS.get(FT.parent.get(k)); if(pp){ if(pp.x<x0) x0-=COLW*0.6; else if(pp.x>x1-NW) x1+=COLW*0.6; }
   fitTo({x0,y0,w:x1-x0,h:y1-y0}, 1); }
-function center(k){ const p=POS.get(k); if(!p) return; const r=svg.getBoundingClientRect();
-  st.k=Math.max(st.k,0.8); st.tx=(r.width-sideW())/2-(p.x+NW/2)*st.k; st.ty=r.height/2-(p.y+NH/2)*st.k; applyTransform(true); }
+function center(k){ const p=POS.get(k); if(!p) return; const r=svg.getBoundingClientRect(), left=legendW();
+  st.k=Math.max(st.k,0.8); st.tx=left+(r.width-sideW()-left)/2-(p.x+NW/2)*st.k; st.ty=r.height/2-(p.y+NH/2)*st.k; applyTransform(true); }
 
 // ---------------- selection and side panel
 function applySel(){
@@ -340,11 +349,14 @@ function select(k){
   <h3>${esc(t('ui.hidden_nb'))} (${hid.length})</h3>${hid.map(h=>`<div class="el">${h.d==='out'?'→':'←'} ${esc(h.name)} <code>${esc(h.o)}</code><br><b>${esc(h.ctx)}</b> <code>${esc(h.at)}</code><br><span class="muted">${esc(vname(h.v))}${h.why?': '+esc(h.why):''}</span></div>`).join('')||'<span class="muted">'+esc(t('ui.none'))+'</span>'}`;
   panel.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',()=>goTo(a.dataset.go)));
   bindActs(panel,[k]);
-  $('xFocus').onclick=()=>{ if(st.focus) focusExit(); else focusTo(k); };
+  $('xFocus').onclick=()=>{ if(st.focus) focusExit(); else focusStart(k); };
   $('xClose').onclick=()=>{ panel.style.display='none'; st.sel=null; applySel(); };
 }
 function goTo(k){ if(!byKey.has(k)) return; const n=byKey.get(k);
-  if(st.focus){ st.types.add(grp(n.t)); syncLegend(); focusTo(k); return; }
+  if(st.focus){ st.types.add(grp(n.t)); syncLegend();
+    // a link in the panel points at a neighbour of the selected node: open that node so the target joins the tree
+    if(!FT.all.has(k)){ if(st.sel && FT.all.has(st.sel) && nbrsOf(st.sel).has(k)) st.focus.open.push(st.sel); else { focusStart(k); return; } }
+    draw(); syncFocusBar(); center(k); select(k); syncFocusBar(); return; }
   let p=parent.get(k); while(p){ st.collapsed.delete(p); p=parent.get(p); }
   st.types.add(grp(n.t)); syncLegend(); if(n.dis) st.disabled=true; if(n.v==='boundary') st.boundary=true; syncOpts();
   draw(); center(k); select(k);
@@ -430,7 +442,7 @@ function load(data, keepView){
   D=data; buildTree();
   if(!keepView){ st.collapsed.clear(); st.sel=null; st.multi.clear(); st.focus=null; foldTo(3); }
   else { [...st.collapsed].forEach(k=>{ if(!byKey.has(k)) st.collapsed.delete(k); }); [...st.multi].forEach(k=>{ if(!byKey.has(k)) st.multi.delete(k); });
-    if(st.focus){ const i=st.focus.findIndex(k=>!byKey.has(k)); if(i>=0) st.focus=st.focus.slice(0,i); if(!st.focus.length) st.focus=null; } }
+    if(st.focus){ if(!byKey.has(st.focus.root)) st.focus=null; else st.focus.open=st.focus.open.filter(k=>byKey.has(k)); } }
   syncFocusBar();
   const ttl=$('ttl'); if(ttl) ttl.textContent=D.meta.title||'';
   const thm=$('thm'); if(thm) thm.textContent=D.meta.theme ? t('ui.theme_prefix')+D.meta.theme : '';
@@ -438,5 +450,5 @@ function load(data, keepView){
   if(!keepView){ fit(); if(st.k<0.3 && roots.length){ st.k=0.6; center(roots[0]); } }
   if(keepView && st.sel && byKey.has(st.sel)) select(st.sel); else if(keepView && st.sel){ st.sel=null; $('side').style.display='none'; }
 }
-return {init, load, fit, goTo, focusTo, placeChrome, state: st};
+return {init, load, fit, goTo, focusStart, placeChrome, state: st};
 })();

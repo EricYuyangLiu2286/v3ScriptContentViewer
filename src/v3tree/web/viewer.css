@@ -62,8 +62,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 #focusBar a.cur{color:var(--ink);font-weight:600}
 #focusBar .ar{color:var(--ink2);margin:0 3px}
 #focusBar button{margin-left:6px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);cursor:pointer}
+#focusBar button:disabled{opacity:.45;cursor:default}
 #focusBar .muted{line-height:1.4}
-.flabel{font-size:13px;font-weight:600;fill:var(--ink2)}
 .node.chain .box{stroke:var(--hl);stroke-width:2.5}
 @media (max-width:900px){ #focusBar{max-width:calc(100% - 24px)} }
 .allLabels .edge.xt text{display:inline}

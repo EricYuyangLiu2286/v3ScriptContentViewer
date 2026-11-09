@@ -78,13 +78,14 @@ UI = {
                       'Tree: all children in one column.'),
     'ui.focus_start': ('专注此节点', 'Focus on this node'),
     'ui.focus_exit': ('退出专注', 'Exit focus'),
-    'ui.focus_back': ('后退一步', 'Back one step'),
+    'ui.focus_back': ('撤销上次展开', 'Undo last open'),
     'ui.focus_title': ('专注链：', 'Focus chain:'),
-    'ui.focus_out': ('它调用或读取的', 'What it calls or reads'),
-    'ui.focus_in': ('调用或读取它的', 'What calls or reads it'),
-    'ui.focus_hint': ('只显示链上的节点和最后一个节点的全部邻居。点右边的节点沿链往下走，点链上的节点退回，Esc 后退一步。',
-                      'Shows only the chain and every neighbour of its last node. Click a node on the right to follow '
-                      'the chain, click a chain node to go back, Esc steps back.'),
+    'ui.focus_hint': ('只显示从起点展开的节点：调用或读取它的在左边，它调用或读取的在右边。点一个节点（或它的 +）展开它的邻居，之前展开的分支都保留；'
+                      '点 − 收起这一支。路径条显示从起点到选中节点的路，Esc 撤销上次展开。',
+                      'Shows only what you opened from the start node: what calls or reads it on the left, what it calls or reads '
+                      'on the right. Click a node (or its +) to open its neighbours; '
+                      'branches opened before stay. Click − to close a branch. The bar shows the way from the start '
+                      'to the selected node; Esc undoes the last open.'),
     'ui.root_fixed': ('根节点是这张图的起点，不能去掉或设为边界。要换根节点，请新建一次搜索。',
                       'The root is where this map starts; it cannot be removed or made a boundary. '
                       'To change the root, start a new search.'),
