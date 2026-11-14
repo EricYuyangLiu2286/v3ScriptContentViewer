@@ -47,13 +47,13 @@ def build_payload(g, inc, bnd, info, conf=(), cache: LineCache | None = None, wi
                 groups[(e['s'], e['t'], e['k'], e['ctx'])].append(e)
     edges, seen_i = [], set()
     for (s, t, k, ctx), es in groups.items():
-        es = [e for e in es if e['i'] not in seen_i]
+        es = list({e['i']: e for e in es if e['i'] not in seen_i}.values())
         if not es:
             continue
         seen_i.update(e['i'] for e in es)
         sites = []
-        for e in es[:12]:
-            ls = cache.lines(e.get('root', 'game'), e['file'])
+        for e in es:
+            ls = cache.lines(e.get('root', 'game'), e['file']) if with_code else []
             line = ls[e['line'] - 1].strip() if 0 < e['line'] <= len(ls) else ''
             block = ' '.join(x.strip() for x in ls[e['line'] - 1:min(e.get('end', e['line']), e['line'] + 8)]) if e.get('end') else ''
             sites.append({'at': f"{e['file']}:{e['line']}" + (f"-{e['end']}" if e.get('end') else ''), 'rel': e['rel'],

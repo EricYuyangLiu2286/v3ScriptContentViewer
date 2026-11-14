@@ -13,7 +13,9 @@ from .i18n import T, type_name, LANG
 from . import i18n
 from .sources import Sources, load_loc, loc_resolve
 
-INDEX_VERSION = 1
+from .characters import add_characters
+
+INDEX_VERSION = 2
 
 # folder -> node type
 FOLDERS = {
@@ -31,6 +33,10 @@ FOLDERS = {
     'common/scripted_triggers': 'strigger',
     'common/script_values': 'svalue',
     'common/country_definitions': 'tag',
+    'common/character_roles': 'charrole',
+    'common/character_traits': 'trait',
+    'common/company_types': 'company',
+    'common/interest_groups': 'ig',
     'common/character_templates': 'chartemplate',
     'common/cultures': 'culture',
     'common/customizable_localization': 'customloc',
@@ -671,7 +677,8 @@ def build(src: Sources, languages=('english',), docs_dir=None, extra_folders=Non
     IDX.src = src
     load_docs(docs_dir)
     t0 = time.time()
-    loc, locsrc = load_loc(src, languages)
+    loclayers = {}
+    loc, locsrc = load_loc(src, languages, loclayers)
     parsed = []  # (ntype, key, sf, blk, how)
     folders = list(FOLDERS.items()) + list((extra_folders or {}).items()) + \
         [(f'common/history/{d}', 'history') for d in HISTORY_DIRS]
@@ -779,6 +786,7 @@ def build(src: Sources, languages=('english',), docs_dir=None, extra_folders=Non
             if r['rtype'] == 'key' and not resolved_any and not r['target'].startswith('scope:')                     and re.fullmatch(r'[A-Za-z0-9_]*\$[A-Za-z0-9_]+\$[A-Za-z0-9_$]*', r['target']):
                 IDX.unresolved.append({'src': callee, 'rtype': 'key', 'target': r['target'], 'file': r['file'],
                                        'line': r['line'], 'reason': T('unres.param_key_no_caller')})
+    add_characters(IDX,loc,locsrc,loclayers)
     # names / localisation
     for key, n in IDX.nodes.items():
         t, nid = n['type'], n['id']
@@ -792,7 +800,7 @@ def build(src: Sources, languages=('english',), docs_dir=None, extra_folders=Non
             name_key = blk.scalar('name') or nid
         elif t in ('je', 'decision', 'law', 'dp', 'wargoal', 'modifier', 'tag', 'culture', 'movement', 'diplaction',
                    'govtype', 'formation', 'objective', 'subjtype', 'charinter', 'treaty', 'pbprinciple',
-                   'ideology', 'lawgroup', 'socialclass', 'socialhier'):
+                   'ideology', 'lawgroup', 'socialclass', 'socialhier', 'trait', 'charrole', 'company', 'ig'):
             name_key = nid
         elif t == 'dynname':
             name_key = nid
@@ -837,7 +845,7 @@ def build(src: Sources, languages=('english',), docs_dir=None, extra_folders=Non
     # dangling targets
     for e in IDX.edges:
         tn = IDX.nodes[e['t']]
-        if not tn['defined'] and tn['type'] not in ('var', 'gvar', 'pop'):
+        if not tn['defined'] and tn['type'] not in ('var', 'gvar', 'pop','charstate','charscope','charselector','charcontext'):
             IDX.dangling.append({'edge_src': e['s'], 'target': e['t'], 'file': e['file'], 'line': e['line']})
     for k, n in IDX.nodes.items():
         n['type_zh'] = type_name(n['type'])

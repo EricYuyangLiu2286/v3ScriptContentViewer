@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Index: characters are nodes of their own (green). Creation in history, events and journal entries, saved scopes, variables, variable lists, runtime selectors, operations such as protection, exile, transfer and death, and dynamic names in localisation are linked with file:line. Rebuild the index after updating.
+- Command line: `v3tree person ID [--context KEY]` exports one character's map with every source location (see README, Characters).
+
 - Map: **Layout: compact / tree** toggle. Compact (default) wraps long sibling lists and their subtrees into columns so the map fits the window shape; the choice is remembered per browser.
 - Map: **Focus on this node** shows only that node and its neighbours. Clicking a node opens its neighbours beside it and keeps the branches opened before, laid out like the main map (callers on the left, what it uses on the right; compact or tree); − closes a branch, Esc undoes the last open, and a bar shows the way from the start to the selected node.
 - Map: only the part near the window is put on the page, with less detail when zoomed far out (no faint cross edges, arrowheads or labels that could not be read). On a 2,700-node map one zoom step went from 350–700 ms to about 30–100 ms; pan and zoom update at most once per frame.

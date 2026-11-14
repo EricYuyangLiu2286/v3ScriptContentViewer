@@ -9,9 +9,9 @@ const NW = 214, NH = 44, GX = 150, GY = 22, COLW = NW + GX, ROWH = NH + GY;
 const WRAP_MIN_H = 6 * ROWH, WRAP_GAP = 40, ASPECT = 1.6;   // ASPECT is used when the window size is unknown
 const COLORS = {je:'#d64545',button:'#ef8a2b',bar:'#c9a227',event:'#3b7dd8',decision:'#9b59b6',law:'#1aa38c',dp:'#b0446e',
   wargoal:'#b0446e',modifier:'#5f9a32',var:'#8a8f98',gvar:'#6f747d',onaction:'#21a9b6',seffect:'#5b6ee1',strigger:'#8e7cc3',
-  svalue:'#8e7cc3',tag:'#a0522d',chartemplate:'#c4627a',customloc:'#7a8a99',history:'#555b66',culture:'#8d6e63',pop:'#8d6e63',
+  svalue:'#8e7cc3',tag:'#a0522d',character:'#007d70',chartemplate:'#c4627a',customloc:'#7a8a99',history:'#555b66',culture:'#8d6e63',pop:'#8d6e63',
   movement:'#777',diplaction:'#777'};
-const GROUPS = ['je','button','bar','event','decision','law','dp','modifier','var','onaction','seffect','strigger','tag','chartemplate','other'];
+const GROUPS = ['je','button','bar','event','decision','law','dp','modifier','var','onaction','seffect','strigger','tag','character','chartemplate','other'];
 const TPRI = {je:0,event:1,button:2,bar:3,decision:4,dp:5,wargoal:5,onaction:6,seffect:7,strigger:8,svalue:9,modifier:10,law:11,var:12,gvar:12,tag:13,chartemplate:14};
 const KPRI = {struct:0,call:1,cond:2,soft:3};
 function grp(ty){ if(ty==='wargoal') return 'dp'; if(ty==='gvar') return 'var'; if(ty==='svalue') return 'strigger';

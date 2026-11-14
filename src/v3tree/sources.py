@@ -77,7 +77,7 @@ class Sources:
 LOC_RE = re.compile(r'^\s*([^\s:#"]+):\d*\s*"(.*)"\s*(?:#.*)?$')
 
 
-def load_loc(src: Sources, languages):
+def load_loc(src: Sources, languages, layers_by_key=None):
     """Merged localisation for the first language, falling back to the next ones."""
     loc, where = {}, {}
     for lang in reversed(list(languages) or ['english']):   # earlier languages win
@@ -97,6 +97,8 @@ def load_loc(src: Sources, languages):
                 m = LOC_RE.match(line)
                 if m:
                     loc[m.group(1)] = m.group(2)
+                    if layers_by_key is not None:
+                        layers_by_key[m.group(1)] = lid
                     where[m.group(1)] = f'{rel}:{n}'
     return loc, where
 

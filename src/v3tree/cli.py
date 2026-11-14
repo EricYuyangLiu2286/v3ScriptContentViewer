@@ -160,12 +160,25 @@ def near(g, spec):
             by = {}
             for e in edges:
                 o = e[other]
-                by.setdefault(o, []).append({'kind': e['k'], 'ctx': e.get('ctx', ''), 'at': f"{e['file']}:{e['line']}",
+                by.setdefault(o, []).append({'kind': e['k'], 'rel':e['rel'], 'root':e.get('root'), 'ctx': e.get('ctx', ''), 'at': f"{e['file']}:{e['line']}",
                                              **({'flags': e['flags']} if e.get('flags') else {})})
             return [{'key': o, 'name': nodes[o].get('name'), 'type': J.describe(g, o)['type'], 'links': ls}
                     for o, ls in sorted(by.items(), key=lambda x: (x[0].split(':', 1)[0], x[0]))]
         out.append({**J.describe(g, k), 'out': group(g['out'][k], 't'), 'in': group(g['in'][k], 's')})
     return out
+
+
+def cmd_person(args):
+    from .dossier import dossier
+    cfg = need_cfg(args)
+    output = ops.out_dir(cfg)
+    graph = J.load_index(output)
+    roots = [args.spec if args.spec in graph['nodes'] else 'character:'+args.spec]
+    folder = output/'cases'/ops.safe_name(args.name or args.spec)
+    summary = dossier(graph,roots,args.context,folder,args.title or args.spec)
+    _p(json.dumps(summary,ensure_ascii=False))
+    _p(str(folder/'map.html'))
+    return 0
 
 
 def cmd_near(args):
@@ -260,6 +273,9 @@ def main(argv=None):
     a.add_argument('--ui', help='interface language: en or zh')
     a.add_argument('--output', help='output folder (default: <repository>/output)')
     sub.add_parser('doctor'); sub.add_parser('index'); sub.add_parser('cases')
+    a = sub.add_parser('person', help='export direct neighbours and character binding paths, with all evidence sites')
+    a.add_argument('spec'); a.add_argument('--name'); a.add_argument('--title')
+    a.add_argument('--context',action='append',default=[],help='include an independently verified stage (full node key)')
     a = sub.add_parser('roots'); a.add_argument('spec')
     a = sub.add_parser('near', help='one node and its direct neighbours with file:line; walk a chain step by step')
     a.add_argument('spec'); a.add_argument('--json', action='store_true')
@@ -278,7 +294,7 @@ def main(argv=None):
     if args.config:
         args.config = Path(args.config)
     i18n.set_lang(C.load(args.config).get('ui_language', 'en'))
-    fn = {'init': cmd_init, 'doctor': cmd_doctor, 'index': cmd_index, 'roots': cmd_roots, 'near': cmd_near, 'new': cmd_new,
+    fn = {'init': cmd_init, 'doctor': cmd_doctor, 'index': cmd_index, 'roots': cmd_roots, 'near': cmd_near, 'person':cmd_person, 'new': cmd_new,
           'expand': cmd_expand, 'render': cmd_render, 'search': cmd_search, 'serve': cmd_serve, 'cases': cmd_cases}.get(args.cmd)
     if not fn:
         p.print_help()

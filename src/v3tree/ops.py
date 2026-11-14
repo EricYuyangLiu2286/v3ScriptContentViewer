@@ -66,6 +66,7 @@ def move_output(old, new) -> list:
 
 def config_fingerprint(cfg) -> str:
     keep = {k: cfg.get(k) for k in ('game', 'mods', 'languages', 'ignore', 'extra_folders', 'ui_language')}
+    keep["index_version"] = I.INDEX_VERSION
     return json.dumps(keep, sort_keys=True, ensure_ascii=False)
 
 

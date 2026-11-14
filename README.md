@@ -60,6 +60,20 @@ python run.py serve                                 # the web interface
 
 `examples/vanilla-acw/` holds a first round of judgments for the vanilla ACW countdown. Copy it to `output/cases/acw_example/` and run `expand acw_example`.
 
+## Characters
+
+Rebuild the index after updating. In the web interface, search a character's name or template id and pick the green **Character** node; **Focus on this node** opens it step by step in both directions. The older **character template** nodes can still be looked up on their own.
+
+~~~sh
+python run.py index --config config/vanilla.json
+python run.py near character:agitator_karl_marx --json --config config/vanilla.json
+python run.py person JAP_meiji_yamato --name meiji --context event:meiji.1 --config config/vanilla.json
+~~~
+
+`person` exports an offline map.html, subgraph.json, decisions.txt and coverage.json to `cases/NAME` in the configured output folder. The map holds every direct incoming and outgoing edge of the character and of the paths that carry it, each with layer, file and line. `--context` (repeatable) adds stages you have already checked as expansion points; only edges in the index are drawn. The export keeps locations only, not code, so third-party mods can be archived.
+
+Creation blocks in history, events and journal entries, named templates and template-less creations are indexed separately. Scopes are qualified by the event or script that defines them. Variables are slots (countries reuse names), so one slot can hold different people; a character put into a variable list with `add_to_variable_list` is linked to that list, and operations inside `every_in_list` and similar blocks are linked to it too. `charselector` means a runtime search by office or condition; `charstate` means an operation or usage rule. Template, candidate and actual office holder mean different things. Generic random selection, implicit engine succession, script parameters and GUI expressions may not be recoverable statically; follow the locations back to the source. Two entries that happen to share a name are not proof of one person.
+
 ## Documents
 
 - [Configuration and the startup check](docs/en/config.md)

@@ -60,6 +60,20 @@ python run.py serve                                 # 网页界面
 
 `examples/vanilla-acw/` 是原版美国内战倒计时的第一轮判定示例。复制到 `output/cases/acw_example/` 后运行 `expand acw_example`。
 
+## 人物
+
+更新后重建索引。在网页搜索人物姓名或模板 ID，选择绿色「人物」；选「专注此节点」可逐步向两侧展开。已有的「人物模板」节点仍可单独查询。
+
+~~~sh
+python run.py index --config config/vanilla.json
+python run.py near character:agitator_karl_marx --json --config config/vanilla.json
+python run.py person JAP_meiji_yamato --name meiji --context event:meiji.1 --config config/vanilla.json
+~~~
+
+`person` 导出离线 map.html、subgraph.json、decisions.txt 和 coverage.json 到配置输出目录的 cases/用例名。图包含人物和绑定路径的所有直接入边、出边，每一处都有来源层、文件和行号。可重复传入已经核实的阶段 `--context`；这些是图的展开点，仍只画索引中存在的边。导出只保留出处，便于归档第三方 MOD。
+
+开局及事件、日志的创建块、有名模板和无模板创建点分别建索引。作用域按所属事件或脚本限定；变量是槽位（包括各国重用同名变量），同一槽位可能保存不同人；用 `add_to_variable_list` 放进变量列表的人物，在 `every_in_list` 等遍历块里受到的操作也连到这个列表。`charselector` 表示运行时按职务或条件找人；`charstate` 表示操作或任用规则。模板、候选、实际就任有不同含义。短期/忙碌保护与流放、转籍及退场均按脚本操作展示。动态本地化使用配置语言中实际生效的键。通用随机选人、隐式引擎继承、脚本参数和 GUI 表达式可能无法静态还原，需沿出处复核。两个词条恰好同名不能证明它们是同一人。
+
 ## 文档
 
 - [配置与启动检查](docs/zh/config.md)
