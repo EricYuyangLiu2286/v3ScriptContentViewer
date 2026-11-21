@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Index: treaty articles and diplomatic actions named by value now get incoming edges. `article = X` (create_treaty) and `has_type = X` (any_scope_article) link to the treaty article; `type = X` inside `create_diplomatic_pact`, `has_diplomatic_pact`, `can_create_diplomatic_pact`, `remove_diplomatic_pact`, `would_accept_diplomatic_action` and `can_afford_diplomatic_action` links to the diplomatic action of that name, or to the treaty article when no such action exists (defensive pacts and alliances are treaty articles since 1.15); `is_diplomatic_action_type` and a subject type's `diplomatic_action` link to the diplomatic action. Before this, `near` showed no callers for any treaty article or pact. Rebuild the index after updating.
+
 - Index: characters are nodes of their own (green). Creation in history, events and journal entries, saved scopes, variables, variable lists, runtime selectors, operations such as protection, exile, transfer and death, and dynamic names in localisation are linked with file:line. Rebuild the index after updating.
 - Command line: `v3tree person ID [--context KEY]` exports one character's map with every source location (see README, Characters).
 
