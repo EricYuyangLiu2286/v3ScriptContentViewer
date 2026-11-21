@@ -120,6 +120,15 @@ class TestIndex(Base):
     def test_inline_bar_progress(self):
         self.assertTrue(self.edges('event:x.3', 'bar:bar_a'))
 
+    def test_treaty_articles_and_pacts_by_value(self):
+        def rels(t):
+            return {(e['k'], e['rel']) for e in self.edges('seffect:treaty_user', t)}
+        self.assertEqual(rels('treaty:art_money'), {('call', 'article'), ('cond', 'has_type')})
+        self.assertEqual(rels('diplaction:da_pay'), {('call', 'create_diplomatic_pact'), ('cond', 'is_diplomatic_action_type')})
+        # a pact type that is not a diplomatic action falls back to the treaty article of that name
+        self.assertEqual(rels('treaty:art_defence'), {('cond', 'can_create_diplomatic_pact')})
+        self.assertTrue(self.edges('subjtype:subject_type_test', 'diplaction:da_pay'))
+
     def test_history_ids_have_no_spaces(self):
         self.assertIn('history:countries/usa_-_usa', self.g['nodes'])
         self.assertFalse([k for k in self.g['nodes'] if any(c.isspace() for c in k)])

@@ -207,6 +207,19 @@ class Index:
 IDX = None
 GENERIC_TYPES = ('lawgroup', 'socialhier', 'socialclass', 'govtype', 'movement', 'formation', 'subjtype', 'pbprinciple')
 GENERIC_IDS = {}
+# Treaty articles: create_treaty { articles_to_create = { { article = X } } }, any_scope_article { has_type = X }.
+TREATY_REF_KEYS = ('article', 'has_type')
+# Diplomatic actions named directly: is_diplomatic_action_type = X, subject type diplomatic_action = X.
+DIPLACTION_REF_KEYS = ('is_diplomatic_action_type', 'diplomatic_action', 'has_map_interaction_diplomatic_action')
+# Blocks whose `type = X` names a pact (a diplomatic action, or a treaty article such as defensive_pact).
+PACT_KEYS = ('create_diplomatic_pact', 'has_diplomatic_pact', 'can_create_diplomatic_pact', 'remove_diplomatic_pact',
+             'would_accept_diplomatic_action', 'can_afford_diplomatic_action')
+PACT_WRITE = ('create_diplomatic_pact', 'remove_diplomatic_pact')
+
+
+def defined(ntype, nid):
+    n = IDX.nodes.get(f'{ntype}:{nid}')
+    return n is not None and n['defined']
 
 
 def edge(src, dst, kind, rel, ctx, sf, off, flags=(), extra=None, end=None):
@@ -368,6 +381,21 @@ class Walker:
                     self.ref('modifier', unquote(c.value), 'call', 'modifiers_while_active', T('ctx.modifiers_while_active'), flags,
                              c.start, access='write')
             return
+        # treaty articles and diplomatic actions named by value
+        if n.children is None and v:
+            if k in TREATY_REF_KEYS and defined('treaty', v):
+                self.ref('treaty', v, mode if k == 'article' else 'cond', k, ctx, flags, n.start)
+                return
+            if k in DIPLACTION_REF_KEYS and defined('diplaction', v):
+                self.ref('diplaction', v, 'cond', k, ctx, flags, n.start)
+                return
+            if k == 'type' and parent is not None and parent.key in PACT_KEYS:
+                # pacts are diplomatic actions; since 1.15 alliances, defensive pacts etc. are treaty articles
+                for tt in ('diplaction', 'treaty'):
+                    if defined(tt, v):
+                        kind = 'call' if (mode == 'call' and parent.key in PACT_WRITE) else 'cond'
+                        self.ref(tt, v, kind, parent.key, ctx, flags, n.start)
+                        return
         if kb and n.children is None and v and f'law:{kb}' in IDX.nodes and IDX.nodes[f'law:{kb}']['defined']                 and not v.startswith('law_type:'):
             self.ref('law', kb, 'cond', 'law_stance', ctx, flags, n.start, access='read')
             return

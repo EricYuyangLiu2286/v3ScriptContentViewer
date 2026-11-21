@@ -40,6 +40,26 @@ je_child = {
 }
 ''',
     'game/common/on_actions/00_on.txt': 'on_monthly_pulse_country = { events = { x.3 } }\n',
+    # treaty articles and diplomatic actions are named by value (article = / has_type = / pact type =)
+    'game/common/treaty_articles/00_art.txt': 'art_money = { kind = directed }\nart_defence = { kind = mutual }\n',
+    'game/common/diplomatic_actions/00_da.txt': 'da_pay = { }\n',
+    'game/common/subject_types/00_subj.txt': 'subject_type_test = { diplomatic_action = da_pay }\n',
+    'game/common/scripted_effects/02_treaty.txt': '''treaty_user = {
+\tcreate_treaty = {
+\t\tfirst_country = c:USA
+\t\tarticles_to_create = { { article = art_money } }
+\t}
+\tcreate_diplomatic_pact = { country = c:USA type = da_pay }
+\tif = {
+\t\tlimit = {
+\t\t\tany_scope_treaty = { any_scope_article = { has_type = art_money } }
+\t\t\tcan_create_diplomatic_pact = { target = c:USA type = art_defence }
+\t\t\tis_diplomatic_action_type = da_pay
+\t\t}
+\t\tset_variable = treaty_seen
+\t}
+}
+''',
     'game/events/x.txt': '''namespace = x
 x.1 = {
 \ttype = country_event
